@@ -46,14 +46,16 @@
 			if (!Array.isArray(names)) names = [names]
 			
 			for (var i = 0; i < names.length; i++) {
-				var name = names[i],
-					filename = m.moduleFile(name)
+				var name = names[i]
+				if (~Object.keys(this.loaded).indexOf(name)) continue
 				
-				if (names.filter.call(document.scripts, function(script) { return script.getAttribute('src') === filename }).length) {
-					continue // this script has already been loaded
-				}
+				var filename = m.moduleFile(name),
+					scriptExists = [].filter.call(document.scripts, function(script) { return script.getAttribute('src') === filename }).length
+				
+				if (scriptExists) continue // this script has already been loaded
+				
 				var script = document.createElement('script')
-				
+				script.async = true
 				script.src = filename
 				document.body.appendChild(script)
 			}
@@ -120,6 +122,7 @@
 		This can be helpful when you suspect the app is hanging.
 		It will tell you the names of all the modules the app is waiting on.
 		Look through them and see if any shouldn't be there.
+		If they all look right, you probably have a circular dependency.
 	*/
 	m.hangInfo = function() {
 		return 'Waiting for modules: ' + modules.undefinedModules().join(', ')
