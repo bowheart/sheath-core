@@ -1,5 +1,15 @@
 # Sheath.js
 
+Sheath is a utility library for modular applications. It provides a clean, overly simplistic interface for defining modules. This includes dependency injection and (in browsers) asynchronous script loading &ndash; replacing RequireJS.
+
+Sheath simplifies the application development process. It is specifically designed for use with MVC frameworks such as Backbone, React, and Mithril, but can also be used without a framework.
+
+Sheath abstracts away the details of your module-web &ndash; you never have to worry about when/where a module's dependencies are defined. It also provides utilities for easily defining common types of modules (models/classes, objects, config, data-stores, etc).
+
+Basically, if you're wanting to create a modular application, Sheath is for you.
+
+Sheath is the module library.
+
 ## Method API
 
 ### sheath()
@@ -12,6 +22,8 @@ Overloads:
 ```javascript
 sheath(name : string, definition : function)
 ```
+
+This is the interfacing for defining modules.
 
 #### So what's so cool about it?
 
@@ -102,7 +114,7 @@ This also prevent hang.
 
 Hang means the app is waiting for a module (dependency) to be defined.
 Since the module loader is meant to work in an asynchronous environment, it will just wait and wait for that module.
-This can be hard to debug (though m.hangInfo() can help), but you should know what causes it:
+This can be hard to debug (though sheath.waitingOn() can help), but you should know what causes it:
 
 1. A module requiring a non-existent module. The non-existent module is either never defined or not getting loaded.
 2. A circular dependency. These are easy to avoid, but sometimes tricky to spot.
