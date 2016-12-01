@@ -1,35 +1,16 @@
-# Mithril-X
+# Sheath.js
 
 ## Method API
 
-These are all the methods added to the global `m` object created by mithril.
-
-### m.moduleFile()
-
-This method is meant to be overridden. This defines a mapping of module names to file paths. When the module loader is in async mode, it will call this function to get the value of each async script's `src` attribute. It will pass the module's name (e.g. `core`) and expect the file path to that module's location on the server (e.g. `modules/core/core.js`).
-
-#### How do I implement it?
-
-Define a function that takes a string and returns a string. Assign that function to `m.moduleFile`:
-
-```javascript
-// Take a module name (e.g. 'food.Pizza') and find the file path (e.g. 'modules/food/models/Pizza.js')
-m.moduleFile = function(name) {
-	var nodes = name.split('.')
-	var file = nodes.pop() // get 'Pizza' from 'food.Pizza'
-	return 'modules/' + nodes.join('/') + '/' + (file[0].toLowerCase() !== file[0] ? 'models/' : '') + file + '.js'
-}
-```
-
-### m.define()
+### sheath()
 
 Signature:
 ```javascript
-m.define(name : string, dependencies : string|array, definition : function)
+sheath(name : string, dependencies : string|array, definition : function)
 ```
 Overloads:
 ```javascript
-m.define(name : string, definition : function)
+sheath(name : string, definition : function)
 ```
 
 #### So what's so cool about it?
@@ -51,8 +32,8 @@ It encourages good code structure, helping you think, 'What am I doing with this
 This helps you keep the Single Responsibility Principle, and who knows what other good things.
 
 - It's organized.
-A mithril app can turn into a big jumble of objects really fast in a big application.
-This keeps everything in its own place, yet globally accessible (but not global)
+A large application can turn into a big jumble of objects and helpers and config and your precious time really fast.
+Going modular (or 'sheathing') keeps everything in its own place, yet globally accessible (but not global)
 
 
 #### How do I use it?
@@ -81,11 +62,11 @@ Usually you'll want to use a factory for this.
 Oh. Like this:
 
 ```javascript
-m.define('dependency', function() {
+sheath('dependency', function() {
 	return 'You got me'
 })
 
-m.define('dependant', 'dependency', function(dependency) {
+sheath('dependant', 'dependency', function(dependency) {
 	console.log(dependency) // <- 'You got me'
 })
 ```
@@ -129,8 +110,30 @@ These are usually solved by keeping strictly to the Single Responsibility Princi
 separate the functionality that both modules need into a separate module that both require.
 
 
-### m.hangInfo()
+### sheath.asyncResolver()
 
+This method is meant to be overridden.
+This defines a mapping of module names to file paths.
+When the module loader is in async mode, it will call this function to get the value of each async script's `src` attribute.
+It will pass the module's name (e.g. `core`) and expect the file path to that module's location on the server (e.g. `modules/core/core.js`).
+
+#### How do I implement it?
+
+Define a function that takes a string and returns a string. Pass that function to `sheath.asyncResolver()`:
+
+```javascript
+// Take a module name (e.g. 'food.Pizza') and find the file path (e.g. 'modules/food/models/Pizza.js')
+sheath.asyncResolver(function(name) {
+	var nodes = name.split('.')
+	var file = nodes.pop() // get 'Pizza' from 'food.Pizza'
+	return 'modules/' + nodes.join('/') + '/' + (file[0].toLowerCase() !== file[0] ? 'models/' : '') + file + '.js'
+})
+```
+
+
+### sheath.waitingOn()
+
+A debugging utility.
 Call this from the console if you suspect the app is hanging.
 It will tell you the names of all the modules the app is waiting on.
 Look through them and see if any shouldn't be there.

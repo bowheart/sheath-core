@@ -1,8 +1,24 @@
 /*
-	Mithril-x is just an add-on to mithril.js
+	Sheath.js
+	Another library by Joshua Claunch -- https://github.com/bowheart
 */
-(function() {
-	// modules -- a private object used by our m.define() function (below)
+(function(outside, inBrowser) {
+	var asyncActive = inBrowser // utilize async loading if we're in a browser environment
+	
+	/*
+		asyncResolver() -- takes a module's name and returns the filename--the `src` attribute of an async <script> tag to load this module.
+		This is just the default! It is meant to be overridden using sheath.asyncResolver() (below).
+	*/
+	var asyncResolver = function(module) {
+		// The default async filename resolver just assumes that the module name is the filepath minus the '.js' extension.
+		return module + '.js'
+	}
+	
+	/*
+		modules -- a private utility used by our sheath() function (below) to keep track of all defined modules.
+		Moves all modules through this process:
+		[declaration received] -> [added to 'toLoad' list] -> [dependencies loaded] -> [definitionFunction called] -> [added to 'loaded' list]
+	*/
 	var modules = {
 		
 		// add() -- A new module was defined! If it's deps are already met, load it, otherwise add it to the list (this.toLoad)
@@ -32,7 +48,7 @@
 		},
 		
 		// load() -- Compiles the list of deps of 'module' and passes them into the module definition function.
-		// Also moves this module from 'toLoad' to 'loaded' so other modules that require this one can know that it's loaded.
+		// Also moves this module from 'toLoad' to 'loaded' so other modules that require this one can use it.
 		load: function(module) {
 			var deps = module.deps.map(function(dep) {
 				return this.loaded[dep]
@@ -43,26 +59,25 @@
 		
 		// loadAsync() -- Creates a <script> tag for each of the module names passed in (if one hasn't been created).
 		loadAsync: function(names) {
+			if (!asyncActive) return
 			if (!Array.isArray(names)) names = [names]
 			
 			for (var i = 0; i < names.length; i++) {
-				var name = names[i]
-				if (~Object.keys(this.loaded).indexOf(name)) continue
+				var name = names[i],
+					filename = asyncResolver(name)
 				
-				var filename = m.moduleFile(name),
-					scriptExists = [].filter.call(document.scripts, function(script) { return script.getAttribute('src') === filename }).length
-				
-				if (scriptExists) continue // this script has already been loaded
-				
+				if (names.filter.call(document.scripts, function(script) { return script.getAttribute('src') === filename }).length) {
+					continue // this script has already been loaded
+				}
 				var script = document.createElement('script')
-				script.async = true
+				
 				script.src = filename
 				document.body.appendChild(script)
 			}
 		},
 		
-		// undefinedModules() -- Returns the list of all modules that have been required but never defined.
-		undefinedModules: function() {
+		// undeclaredModules() -- Returns the list of all modules that have been required but never declared.
+		undeclaredModules: function() {
 			var definedModules = Object.keys(this.loaded).concat(this.toLoad.map(function(module) {
 				return module.name
 			}))
@@ -81,21 +96,14 @@
 		
 		asyncMode: false, // determines if we'll load any new deps asynchronously; will be turned on once all initial scripts are loaded
 		loaded: {}, // the list of defined modules
-		toLoad: [] // the list of modules whose dependencies are not yet met
+		toLoad: [] // the list of declared modules whose dependencies are not yet met
 	}
 	
 	
-	/*
-		m.moduleFile() -- takes a module's name and returns the filename--the `src` attribute of an async <script> tag to load this module.
-		This is just the default! It is meant to be overridden.
-	*/
-	m.moduleFile = function(name) {
-		return name + '/' + name.split('/').filter(function(node) { return node }).pop() + '.js'
-	}
 	
 	
 	/*
-		m.define() -- A utility for organized, encapsulated module definition and dependency injection.
+		sheath() -- A utility for organized, encapsulated module definition and dependency injection.
 		
 		Parameters:
 			name -- required -- string -- The name of this module.
@@ -107,7 +115,7 @@
 				The parameters of this function will be this module's dependencies, in the order they were listed.
 				Whatever is 'return'ed by this function will be injected into any modules that require this one.
 	*/
-	m.define = function(name, deps, defFunc) {
+	var sheath = outside.sheath = function(name, deps, defFunc) {
 		// arg swapping -- deps is optional; if 'defFunc' doesn't exist, move it down
 		if (!defFunc) {
 			defFunc = deps
@@ -117,21 +125,41 @@
 		modules.add({name: name, deps: deps, defFunc: defFunc})
 	}
 	
+	
 	/*
-		m.hangInfo()
-		This can be helpful when you suspect the app is hanging.
-		It will tell you the names of all the modules the app is waiting on.
-		Look through them and see if any shouldn't be there.
-		If they all look right, you probably have a circular dependency.
+		sheath.async() / sheath.async(bool) -- a getter/setter to see/define status of the async loader.
+		Pass true to activate async loading, false to deactivate.
+		Async loading is turned on by default.
 	*/
-	m.hangInfo = function() {
-		return 'Waiting for modules: ' + modules.undefinedModules().join(', ')
+	sheath.async = function(val) {
+		if (typeof val === 'undefined') return asyncActive
+		return asyncActive = Boolean(val)
 	}
 	
 	
-	// Once all the initial scripts have been loaded, turn on asychronous loading and load any not-yet-defined modules.
+	/*
+		sheath.asyncResolver(function) -- the default async filename resolver doesn't do much. Use this guy to beef it up.
+	*/
+	sheath.asyncResolver = function(newResolver) {
+		if (typeof newResolver !== 'function') throw new TypeError('Sheath.js Error: custom asyncResolver must be a function')
+		
+		asyncResolver = newResolver
+	}
+	
+	
+	/*
+		sheath.waitingOn() -- returns the names of all the modules the app is waiting on.
+		These are modules that have been listed as dependencies of other modules, but that haven't been declared yet.
+		Call this from the console when you suspect the app is hanging.
+	*/
+	sheath.waitingOn = function() {
+		return modules.undeclaredModules()
+	}
+	
+	
+	// Once all the initial scripts have been loaded, turn on asychronous loading and load any not-yet-declared modules.
 	window.onload = function() {
 		modules.asyncMode = true
-		modules.loadAsync(modules.undefinedModules())
+		modules.loadAsync(modules.undeclaredModules())
 	}
-})()
+})(window || typeof module === 'object' && typeof module.exports === 'object' && module.exports || this, typeof window === 'object')
