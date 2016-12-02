@@ -51,7 +51,27 @@ Every module goes through this basic life cycle.
 
 ### Implementing Async Loading
 
+Sheath's life has two phases: Sync and Async.
 
+#### Sync Phase
+
+When Sheath first loads &ndash; before the page is ready &ndash; Sheath is in its Synchronous Phase. During this phase, Sheath will accept all module declarations and wait patiently for all dependencies to be defined. It will define all modules whose dependencies are met.
+
+#### Async Phase
+
+The Asynchronous Phase begins when the page is ready &ndash; read "on `document.ready`." At this point, Sheath will find all the module names that have been listed as dependencies of currently defined modules, but never declared. For each, it will find the file name where that module is declared and request that file from the server &ndash; read "create a script tag with that file name as the `src` attribute."
+
+Wait! How does Sheath "find the file name"?
+
+### Have Some Terminology
+
+- We use `sheath(name, definition)` to *declare* a module. A module declaration is like making a promise with Sheath that a module with `name` will be defined and usable by the rest of our application.
+- When Sheath has loaded all of a module's dependencies, it calls our definition function, passing those dependencies in the order they were declared. This *defines* our module. A good modular application will house all code inside these definition functions. A module's definition can contain absolutely any code. All code in our module definition will be hidden from the rest of our application, except:
+- The statement we return in our module definition function will become our module's *visage*, or public face. The visage is what will get passed to all of our module's dependents &ndash; other modules that list our module as a dependency.
+
+### Let's Review
+
+- Every module has the basic life cycle: declaration -> waiting on dependencies -> definition -> visage stored -> injected into dependents
 
 ## Method API
 
