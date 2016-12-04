@@ -1,3 +1,0 @@
-sheath('app', function() {
-	
-})
