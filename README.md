@@ -26,7 +26,7 @@ Simple as that. Let's break down what happened here:
 
 - We *declared* a module named 'dagger'.
 - Sheath called our function. This *defined* our module.
-- We exposed the string 'a dagger' as our module's *visage*.
+- We exposed the string 'a dagger' as our module's *visage*. The visage is the public face of our module &ndash; it's what will get injected into dependents
 
 Alright. Cool, I guess. Now what was the point of that?
 
@@ -42,90 +42,26 @@ Let's break this one down:
 
 - We declared a module named 'assassin' with one dependency, 'dagger'.
 - Sheath ensured that the 'dagger' module was loaded before:
-- Sheath called our function, passing the dagger module's visage as the first argument. This defined our module.
+- Sheath called our function, passing ("injecting") the dagger module's visage as the first argument. This defined our module.
 - We exposed a new string concatenated with the dagger module's visage as our module's visage.
 
 Every module goes through this basic life cycle.
 
 > Tip: A module can be anything! Feel free to wrap every model, component, utility function, etc in its own module.
 
-### Some Terminology
+## To Be Continued...
 
-- A *module* is just a piece of code that has a purpose &ndash; [a single purpose](https://en.wikipedia.org/wiki/Single_responsibility_principle). A module's name should indicate that purpose. Modules are just a way to organize code, often seen as an alternative to classes. This isn't quite true; modules can contain classes and facilitate class organization. An object-oriented structure can exist inside a modular application. Modules offer ultimate flexibility while encouraging good code structure. The module definition function creates a mandatory closure around all modules. This keeps stuff off the global scope. Modules make it easier to keep the Single Responsibility Principle.
-
-- We use `sheath(name, definition)` to *declare* a module. A module declaration is like making a promise with Sheath that a module with `name` will be defined and usable by the rest of our application.
-
-- When Sheath has loaded all of our module's dependencies, it calls our definition function, passing those dependencies in the order they were declared. This *defines* our module. A good modular application will house all code inside these definition functions. A module's definition can contain absolutely any code. All code in our module definition will be hidden from the rest of our application, except:
-
-- The statement we return in our module definition function will become our module's *visage*, or public face. The visage is what will get passed to all of our module's dependents &ndash; other modules that list our module as a dependency.
-
-### Implementing Async Loading
-
-Sheath's life has three phases: Config, Sync, and Async.
-
-#### Config Phase
-
-Sheath begins in the Config Phase. In this phase, you tell Sheath all the app-specific configuration. See `sheath.config()` in the method api for a list of available configuration options. The Config Phase ends once the first module is defined.
-
-#### Sync Phase
-
-As soon as a module is defined &ndash; if the page is not yet ready &ndash; the Sync Phase begins. During this phase, Sheath will accept all module declarations and wait patiently for dependencies to be defined. It will define all modules whose dependencies are met.
-
-#### Async Phase
-
-The Async Phase begins when the page is ready &ndash; once all of the DOM's initial resources have been loaded. If no modules are defined before this point, Sheath will skip the Sync Phase. At this point, Sheath will find all the module names that have been listed as dependencies of currently defined modules, but never declared. For each one, it will find the file name where that module is declared and request that file from the server &ndash; read "create a script tag with that file name as the `src` attribute."
-
-Now every time Sheath encounters a dependency that hasn't been declared, rather than wait patiently for that module declaration, Sheath fires off a request to fetch that module.
-
-Wait! How does Sheath "find the file name"?
-
-Sheath calls a module file name resolving function that is defined internally, but can be overridden. By default, this function will just tack '.js' onto the end of a module name. For example, Sheath would assume that a module called 'core' would live in a file called 'core.js', and so would output a script tag like so:
-
-```html
-<script src="core.js"></script>
-```
-
-Let's override the default module file name resolver:
-
-```javascript
-sheath.asyncResolver(function(name) {
-	return 'modules/' + name + '.js'
-})
-```
-
-Yep. To override the module file name resolver, call `sheath.asyncResolver()` and pass a function that accepts the module name as a parameter and returns the file name. In this example, a 'core' module would live in 'modules/core.js'. You can beef up the `asyncResolver` as much as you want. Remember also that you have complete control over your module names. Make your `asyncResolver` as intelligent as you need.
-
-Hmm. I'll pass.
-
-To disable async loading, run:
-
-```javascript
-sheath.async(false)
-```
-
-If you want to ensure that Sheath never enters the Async Phase, be sure to call this while Sheath is still in the Sync Phase &ndash; e.g. in one of the initially-loaded files. With async loading disabled, Sheath will leave it up to you to ensure that all module files are loaded. You can turn async loading back on at anytime by running:
-
-```javascript
-sheath.async(true)
-```
-
-### Let's Review
-
-Modules are legit.
-
-A module is just a packet of code with a purpose.
-
-Every module has the basic life cycle: declaration -> waiting on dependencies -> definition -> visage stored -> visage injected into dependents
-
-The `sheath()` function is used to declare/define a module.
-
-We can use `sheath.asyncResolver()` to override the default module file name resolver.
-
-We can turn lazy-loading on/off with `sheath.async()`
+That's really all you need to get started. Take a look at the [github wiki](https://github.com/bowheart/sheath.js/wiki) for a more in-depth rundown and the full API documentation.
 
 ## The Not Basics
 
+### For Your Convenience
+
 Sheath provides utilities for easily creating common types of modules
+
+### Fragments
+
+
 
 ## Method API
 
@@ -308,15 +244,3 @@ These are arbitrary.
 It doesn't matter what your naming conventions are, but a standard will make your app more predictable.
 This allows you to implement lazy-loading based on a module's name.
 This also prevent hang.
-
-
-#### Wait, what's HANG?
-
-Hang means the app is waiting for a module (dependency) to be defined.
-Since the module loader is meant to work in an asynchronous environment, it will just wait and wait for that module.
-This can be hard to debug (though sheath.waitingOn() can help), but you should know what causes it:
-
-1. A module requiring a non-existent module. The non-existent module is either never defined or not getting loaded.
-2. A circular dependency. These are easy to avoid, but sometimes tricky to spot.
-These are usually solved by keeping strictly to the Single Responsibility Principle;
-separate the functionality that both modules need into a separate module that both require.

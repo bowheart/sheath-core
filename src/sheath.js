@@ -11,7 +11,6 @@
 	var Sheath = {
 		addDeclaredModule: function(module) {
 			if (this.declaredModules[module.name]) throw new Error('Sheath.js Error: Multiple modules with the same name found. Name: "' + module.name + '"')
-			if (this.phase === 'config') this.toPhase('sync')
 			this.declaredModules[module.name] = module
 		},
 		
@@ -51,6 +50,18 @@
 		asyncResolver: function(module) {
 			// The default async filename resolver just assumes that the module name is the filepath minus the '.js' extension.
 			return module + '.js'
+		},
+		
+		declareInitialModules: function() {
+			for (var i = 0; i < this.initialModules.length; i++) {
+				var module = this.initialModules[i]
+				new Module(module.name, module.deps, module.defFunc)
+			}
+		},
+		
+		defineConst: function(key, val) {
+			if (this.constants[key]) throw new Error('Sheath.js Error: Const "' + key + '" is already defined. Overwrite disallowed.')
+			this.constants[key] = val
 		},
 		
 		export: function(key, val) {
@@ -93,7 +104,7 @@
 		toPhase: function(phase) {
 			this.phase = phase
 			if (phase === 'sync') {
-				
+				this.declareInitialModules()
 				return
 			}
 			// async phase
@@ -118,12 +129,14 @@
 			})
 		},
 		
-		fragmentAccessor: '.', // by default, a period accesses a module fragment
 		asyncEnabled: inBrowser, // utilize async loading if we're in a browser environment
-		phase: 'config', // Sheath begins in Sync Phase; Async Phase will begin once all initial scripts are loaded
+		constants: {},
 		declaredModules: {}, // keeps track of all module declarations we've encountered throughout the lifetime of this app
 		definedModules: {},
+		fragmentAccessor: '.', // by default, a period accesses a module fragment
+		initialModules: [],
 		moduleDependents: {}, // map module names to all dependents found for that module; this turns defining a module into a simple lookup
+		phase: 'config', // Sheath begins in Config Phase; The two other phases will come in once all initial scripts are loaded
 		tasks: []
 	}
 	
@@ -213,7 +226,7 @@
 			name : string -- required -- The name of this module.
 			deps : string | array -- optional -- The module or list of modules required by this module.
 				Each of these must be the name of another module defined somewhere.
-				If any dep in this list is not declared in the app and cannot be found by the async loader, the app will 'hang' (see below).
+				If any dep in this list is not declared in the app and cannot be found by the async loader, the app will hang.
 				These will be 'injected' into the defFunc.
 			defFunc : function -- required -- The function that will be called to define this module.
 				The parameters of this function will be this module's dependencies, in the order they were listed.
@@ -226,6 +239,10 @@
 			deps = []
 		}
 		if (typeof deps === 'string') deps = [deps] // if 'deps' is a string, make it the only dependency
+		if (Sheath.phase === 'config') {
+			Sheath.initialModules.push({name: name, deps: deps, defFunc: defFunc})
+			return
+		}
 		new Module(name, deps, defFunc)
 	}
 	
@@ -299,12 +316,13 @@
 	sheath.const = function(key, val) {
 		if (typeof key === 'string') {
 			if (typeof val === 'undefined') return Sheath.constants[key]
-			return Sheath.constants[key] = val
+			return Sheath.defineConst(key, val)
 		}
 		if (typeof key !== 'object') throw new TypeError('Sheath.js Error: sheath.const() expects either a key and a value, or an object. Received: "' + typeof key + '"')
 		Object.keys(key).forEach(function(prop) {
-			Sheath.constants[prop] = key[prop]
+			Sheath.defineConst(prop, key[prop])
 		})
+		return key
 	}
 	
 	
@@ -422,6 +440,10 @@
 			deps = []
 		}
 		if (typeof deps === 'string') deps = [deps] // if 'deps' is a string, make it the only dependency
+		if (Sheath.phase === 'config') {
+			Sheath.initialModules.push({name: '', deps: deps, defFunc: defFunc})
+			return
+		}
 		new Module('', deps, defFunc)
 	}
 	
@@ -437,5 +459,9 @@
 	
 	
 	// Once all the initial scripts have been loaded, turn on asychronous loading and request any not-yet-declared modules.
-	window.onload = Sheath.toPhase.bind(Sheath, 'async')
+	window.onload = function() {
+		Sheath.toPhase('config')
+		Sheath.toPhase('sync')
+		Sheath.toPhase('async')
+	}
 })(window || typeof module === 'object' && typeof module.exports === 'object' && module.exports || this, typeof window === 'object')
