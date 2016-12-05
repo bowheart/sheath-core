@@ -1,6 +1,7 @@
 sheath('app', [
 	'weapons',
-	'config.user'
+	'config.user',
+	'async-module'
 ], function(weapons, user) {
 	console.log(user)
 	$('body').append(weapons.view())
