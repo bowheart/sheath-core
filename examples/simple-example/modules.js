@@ -1,45 +1,38 @@
-sheath('app', [
-	'weapons',
-	'config.user',
-	'async-module'
-], function(weapons, user) {
-	console.log(user)
-	$('body').append(weapons.view())
+sheath('app', ['one', 'two', 'three'], function(one, two, three) {
+	$('body').append([one, two, three].join('<br>'))
 })
 
 
-sheath('weapons', ['weapons > dirk', 'weapons > sword'], function(dirk, sword) {
-	return {
-		view: function() {
-			return dirk.view().add(sword.view())
-		}
-	}
+sheath('one', ['one-a', 'one-b', 'one-c'], function(a, b, c) {
+	return 'one <br>' + [a, b, c].join('<br>')
+})
+
+sheath('one-a', function() {
+	return 'one-a'
+})
+
+sheath('one-b', function() {
+	return 'one-b'
+})
+
+sheath('one-c', ['one-c-i', 'one-c-ii'], function(one, two) {
+	return 'one-c <br>' + [one, two].join('<br>')
+})
+sheath('one-c-i', function() {
+	return 'one-c-i'
+})
+sheath('one-c-ii', function() {
+	return 'one-c-ii'
 })
 
 
-sheath('weapons > dirk', 'Weapon', function(Weapon) {
-	return sheath.object(Weapon, {
-		name: 'dirk'
-	})
+sheath('two', function() {
+	return 'two'
 })
 
 
-sheath('weapons > sword', 'Weapon', function(Weapon) {
-	return sheath.object(Weapon, {
-		name: 'sword'
-	})
+sheath('three', function() {
+	return 'three'
 })
 
-
-sheath('Weapon', function() {
-	return sheath.object({
-		view: function() {
-			return $('<section><h1>' + this.name + '</h1></section>')
-		}
-	})
-})
-
-
-sheath('config', function() {
-	sheath.export('user', {name: 'Bob'})
-})
+sheath.devMode(true)

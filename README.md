@@ -27,7 +27,7 @@ Alright. Cool, I guess. Now what was the point of that?
 Let's create another module:
 
 ```javascript
-sheath('assassin', 'dagger', function(dagger) {
+sheath('assassin', ['dagger'], function(dagger) {
 	return 'A deadly assassin. Weapon: ' + dagger
 })
 ```
@@ -81,4 +81,4 @@ This gives us a module-graph with this basic form:
 These are arbitrary.
 It doesn't matter what your naming conventions are, but a standard will make your app more predictable.
 This allows you to implement lazy-loading based on a module's name.
-This also prevent hang.
+This also prevents hang.
