@@ -53,4 +53,4 @@ Bugs can be reported at the [github issues page](https://github.com/bowheart/she
 
 ## License
 
-The [MIT License](blob/next/LICENSE)
+The [MIT License](LICENSE)
