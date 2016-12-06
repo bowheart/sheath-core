@@ -46,39 +46,3 @@ Every module goes through this basic life cycle.
 ## To Be Continued...
 
 That's really all you need to get started. Take a look at the [github wiki](https://github.com/bowheart/sheath.js/wiki) for a more in-depth rundown and the full API documentation.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-#### So how SHOULD I use it?
-
-- There should be an 'app' and a 'core' module in every Mithril-x platform.
-Core contains basic functionality used by the rest of the app.
-App takes our custom modules and uses them to kick-start the application.
-This gives us a module-graph with this basic form:
-
-```javascript
-/*
-     O core
-    /|\
-   O O O custom modules
-    \|/
-     O app
-*/
-```
-
-- Come up with naming conventions such as "all models should be PascalCase."
-These are arbitrary.
-It doesn't matter what your naming conventions are, but a standard will make your app more predictable.
-This allows you to implement lazy-loading based on a module's name.
-This also prevents hang.
