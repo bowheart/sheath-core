@@ -20,7 +20,7 @@ Simple as that. Let's break down what happened here:
 
 - We *declared* a module named 'dagger'.
 - Sheath called our function. This *defined* our module.
-- We exposed the string 'a dagger' as our module's *visage*. The visage is the public face of our module &ndash; it's what will get injected into dependents
+- We exposed the string 'a dagger' as our module's *visage*. The visage is the public face of our module &ndash; it's what will get injected into dependents.
 
 Alright. Cool, I guess. Now what was the point of that?
 
@@ -46,3 +46,11 @@ Every module goes through this basic life cycle.
 ## To Be Continued...
 
 That's really all you need to get started. Take a look at the [github wiki](https://github.com/bowheart/sheath.js/wiki) for a more in-depth rundown and the full API documentation.
+
+## Bugs, Pull Requests, Feedback, Just Everything
+
+Bugs can be reported at the [github issues page](https://github.com/bowheart/sheath.js/issues). All suggestions and feedback are so super welcome. Also feel free to fork and pull request. Happy coding!
+
+## License
+
+The [MIT License](blob/next/LICENSE)

@@ -77,6 +77,7 @@
 			this.constants[key] = val
 		},
 		
+		// A simple Depth-First Search used for circular dependency detection.
 		dfs: function(modulesEncountered, nextModule) {
 			if (!nextModule) return false
 			if (~modulesEncountered.indexOf(nextModule.name)) return true
@@ -90,7 +91,7 @@
 				var result = this.dfs(modulesEncountered, this.declaredModules[deps[depsKeys[i]].name])
 				
 				if (result) return result
-				modulesEncountered.splice(lastIndex)
+				modulesEncountered.splice(lastIndex) // no circles down that branch; remove that branch from the tree
 			}
 			return false
 		},
@@ -372,6 +373,19 @@
 	
 	
 	/*
+		sheath.dependents() -- Returns a map of modules -> dependents
+		An analysis tool.
+	*/
+	sheath.dependents = function() {
+		var map = {}
+		Object.keys(Sheath.dependents).forEach(function(moduleName) {
+			map[moduleName] = Sheath.dependents[moduleName].map(function(dep) { return dep.name }) // map to return a clone
+		})
+		return map
+	}
+	
+	
+	/*
 		sheath.devMode() -- A getter/setter to get the status of and enable/disable advanced debugging/analysis tools.
 		A config shorthand.
 	*/
@@ -481,6 +495,7 @@
 	/*
 		sheath.phase() -- A debugging utility. This will return the life phase that Sheath is currently in.
 		Use this to familiarize yourself with Sheath's life cycle.
+		An analysis tool.
 	*/
 	sheath.phase = function() {
 		return Sheath.phase
@@ -507,11 +522,11 @@
 	
 	
 	/*
-		sheath.waitingOn() -- Returns the names of all the modules the app is waiting on.
+		sheath.missing() -- Returns the names of all the modules the app is waiting on.
 		These are modules that have been listed as dependencies of other modules, but that haven't been declared yet.
 		Call this from the console when you suspect the app is hanging.
 	*/
-	sheath.waitingOn = function() {
+	sheath.missing = function() {
 		return Sheath.undeclaredModules()
 	}
 	
