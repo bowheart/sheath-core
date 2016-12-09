@@ -439,7 +439,7 @@
 		// Arg swapping -- 'parent' is optional; if 'model' doesn't exist, move it down.
 		if (!model) {
 			model = parent
-			parent = Sheath.baseModel || null
+			parent = Sheath.baseModel
 		}
 		var parentPrototype = typeof parent === 'function' ? parent.prototype : parent
 		
@@ -457,7 +457,7 @@
 		} || new Function()
 		
 		// Implement the inheritance (if user gave a parent model) and make the rest of the model the prototype
-		constructor.prototype = Object.create(parentPrototype, Sheath.toPropertyDescriptors(model))
+		constructor.prototype = Object.create(parentPrototype || null, Sheath.toPropertyDescriptors(model))
 		
 		return constructor
 	}
@@ -474,7 +474,7 @@
 		// Arg swapping -- 'parent' is optional; if 'object' doesn't exist, move it down.
 		if (!object) {
 			object = parent
-			parent = Sheath.baseObject || null
+			parent = Sheath.baseObject
 		}
 		
 		// Make sure the object param is valid.
@@ -486,7 +486,7 @@
 		}
 		
 		// Make the parent the object's prototype.
-		if (parent) object = Object.create(parent, Sheath.toPropertyDescriptors(object))
+		object = Object.create(parent || null, Sheath.toPropertyDescriptors(object))
 		
 		return object
 	}
