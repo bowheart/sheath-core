@@ -2,7 +2,14 @@
 	Sheath.js
 	Another library by Joshua Claunch -- https://github.com/bowheart
 */
-(function(outside, inBrowser) {
+(function(outside, factory) {
+	var serverSide = typeof module === 'object' && typeof module.exports === 'object',
+		sheath = factory(!serverSide)
+	
+	serverSide
+		? module.exports = sheath
+		: outside.sheath = sheath
+})(this, function(inBrowser) {
 	/*
 		Sheath -- A private utility to keep track of modules.
 		Moves all modules through this process:
@@ -32,7 +39,7 @@
 		
 		addDependent: function(module, depName) {
 			// If the dep is already met, check it off the module's list.
-			if (this.definedModules[depName]) return module.resolveDep(this.definedModules[depName])
+			if (this.definedModules[depName]) return module.readyDeps.push(this.definedModules[depName])
 			
 			if (!this.dependents[depName]) this.dependents[depName] = []
 			this.dependents[depName].push(module)
@@ -75,6 +82,7 @@
 		defineConst: function(key, val) {
 			if (this.constants[key]) throw new Error('Sheath.js Error: Const "' + key + '" is already defined. Overwrite disallowed.')
 			this.constants[key] = val
+			return val
 		},
 		
 		// A simple Depth-First Search used for circular dependency detection.
@@ -132,6 +140,14 @@
 			}
 		},
 		
+		name: function() {
+			if (!this.tasks.length) {
+				console.warn('Sheath.js Warning: No module is currently being defined. Call to sheath.name() will return an empty string.')
+				return ''
+			}
+			return this.tasks[this.tasks.length - 1].name
+		},
+		
 		taskEnd: function() {
 			this.tasks.pop()
 		},
@@ -149,7 +165,7 @@
 			// async phase
 			var undeclaredModules = this.undeclaredModules()
 			if (this.devMode && !this.asyncEnabled && undeclaredModules.length) {
-				console.warn('Sheath.js Warning: Lazy-loading disabled, Sync Phase ended and undeclared modules found. Modules:', this.undeclaredModules(true))
+				console.warn('Sheath.js Warning: Lazy-loading disabled. Sync Phase ended and undeclared modules found. Modules:', this.undeclaredModules(true))
 			}
 			this.loadAsync(undeclaredModules)
 		},
@@ -181,7 +197,7 @@
 			})
 		},
 		
-		asyncEnabled: inBrowser, // by default, utilize async loading if we're in a browser environment
+		asyncEnabled: true, // async is enabled by default
 		constants: {},
 		declaredModules: {}, // keeps track of all module declarations we've encountered throughout the lifetime of this app
 		definedModules: {},
@@ -203,6 +219,7 @@
 		this.defFunc = defFunc
 		this.depsLeft = deps.length
 		this.resolvedDeps = []
+		this.readyDeps = []
 		this.exports = {}
 		
 		this.mapDeps()
@@ -245,6 +262,7 @@
 				mappedDeps[mappedDep.name] = mappedDep
 			}
 			this.deps = mappedDeps
+			this.resolveReadyDeps()
 		},
 		
 		resolveDep: function(resolvedDep) {
@@ -259,6 +277,12 @@
 			
 			this.depsLeft--
 			this.define()
+		},
+		
+		resolveReadyDeps: function() {
+			for (var i = 0; i < this.readyDeps.length; i++) {
+				this.resolveDep(this.readyDeps[i])
+			}
 		}
 	}
 	
@@ -276,9 +300,9 @@
 				These will be 'injected' into the defFunc.
 			defFunc : function -- required -- The function that will be called to define this module.
 				The parameters of this function will be this module's dependencies, in the order they were listed.
-				Whatever is 'return'ed by this function will be injected into any modules that require this one.
+				Whatever is 'return'ed by this function will be injected into this module's dependents.
 	*/
-	var sheath = outside.sheath = function(name, deps, defFunc) {
+	var sheath = function(name, deps, defFunc) {
 		// arg swapping -- deps is optional; if 'defFunc' doesn't exist, move it down
 		if (!defFunc) {
 			defFunc = deps
@@ -309,7 +333,7 @@
 	sheath.asyncResolver = function(newResolver) {
 		if (typeof newResolver !== 'function') throw new TypeError('Sheath.js Error: Custom asyncResolver must be a function')
 		
-		Sheath.asyncResolver = newResolver
+		return Sheath.asyncResolver = newResolver
 	}
 	
 	
@@ -323,11 +347,14 @@
 		if (Sheath.phase !== 'config') {
 			throw new Error('Sheath.js Error: baseModel can only be set in the config phase.')
 		}
-		if (!~['function', 'object'].indexOf(typeof baseModel)) {
-			throw new TypeError('Sheath.js Error: baseModel must be a function, an object, or null. Found "' + typeof baseModel + '"')
+		if (typeof baseModel !== 'object') {
+			throw new TypeError('Sheath.js Error: baseModel must be an object or null. Found "' + typeof baseModel + '"')
 		}
 		
-		return Sheath.baseModel = baseModel
+		var constructor = baseModel.init || function ModelBase() {}
+		constructor.prototype = Object.create(baseModel, Sheath.toPropertyDescriptors(baseModel))
+		
+		return Sheath.baseModel = constructor
 	}
 	
 	
@@ -362,6 +389,7 @@
 	sheath.const = function(key, val) {
 		if (typeof key === 'string') {
 			if (typeof val === 'undefined') return Sheath.constants[key]
+			if (typeof val === 'object') Object.freeze(val)
 			return Sheath.defineConst(key, val)
 		}
 		if (typeof key !== 'object') throw new TypeError('Sheath.js Error: sheath.const() expects either a key and a value, or an object. Received: "' + typeof key + '"')
@@ -432,34 +460,48 @@
 		sheath.model() -- An easy interface for declaring JavaScript 'classes' with inheritance.
 		
 		Params:
-			parent : object|function -- optional -- The prototype, or function whose prototype this model will inherit.
+			parent : function -- optional -- The constructor function whose prototype this model will inherit.
 			model : object -- required -- The class definition. If the object has an 'init()' property (optional), it will become the class constructor.
 	*/
 	sheath.model = function(parent, model) {
+		if (Sheath.phase === 'config') throw new Error('Sheath.js Error: sheath.model() cannot be called during the config phase.')
+		
 		// Arg swapping -- 'parent' is optional; if 'model' doesn't exist, move it down.
 		if (!model) {
 			model = parent
 			parent = Sheath.baseModel
 		}
-		var parentPrototype = typeof parent === 'function' ? parent.prototype : parent
 		
 		// Make sure the model param is valid.
 		if (typeof model !== 'object') throw new TypeError('Sheath.js Error: Model must be an object')
 		
 		// Make sure the parent param is valid, if it was given.
-		if (parent && !~['function', 'object'].indexOf(typeof parent)) {
-			throw new TypeError('Sheath.js Error: Parent must be a constructor function or an object')
+		if (parent && typeof parent !== 'function') {
+			throw new TypeError('Sheath.js Error: Parent must be a constructor function')
 		}
 		
 		// Use the init() property of the model as the constructor (if it exists), otherwise use the parent's (if there's a parent)
-		var constructor = model.init || parent && typeof parentPrototype.init === 'function' && function() {
-			return parentPrototype.init.apply(this, arguments)
-		} || new Function()
+		var constructor = model.init || function Model() {
+			if (parent) return parent.apply(this, arguments)
+		}
+		
+		var parentPrototype = parent ? parent.prototype : null
+		
+		// Set up the `this.super` property
+		model.super = parentPrototype
 		
 		// Implement the inheritance (if user gave a parent model) and make the rest of the model the prototype
-		constructor.prototype = Object.create(parentPrototype || null, Sheath.toPropertyDescriptors(model))
+		constructor.prototype = Object.create(parent ? parent.prototype : null, Sheath.toPropertyDescriptors(model))
 		
 		return constructor
+	}
+	
+	
+	/*
+		sheath.name() -- Get the name of the module currently being defined. Use to reduce duplication.
+	*/
+	sheath.name = function() {
+		
 	}
 	
 	
@@ -471,6 +513,8 @@
 			object : object -- required -- The new object you want created.
 	*/
 	sheath.object = function(parent, object) {
+		if (Sheath.phase === 'config') throw new Error('Sheath.js Error: sheath.model() cannot be called during the config phase.')
+		
 		// Arg swapping -- 'parent' is optional; if 'object' doesn't exist, move it down.
 		if (!object) {
 			object = parent
@@ -514,10 +558,10 @@
 		}
 		if (typeof deps === 'string') deps = [deps] // if 'deps' is a string, make it the only dependency
 		if (Sheath.phase === 'config') {
-			Sheath.initialModules.push({name: '', deps: deps, defFunc: defFunc})
+			Sheath.initialModules.push({name: '', deps: deps, defFunc: func})
 			return
 		}
-		new Module('', deps, defFunc)
+		new Module('', deps, func)
 	}
 	
 	
@@ -532,8 +576,13 @@
 	
 	
 	// Once all the initial scripts have been loaded, run the sync phase, then turn on asychronous loading and request any not-yet-declared modules.
-	window.onload = function() {
+	var advancePhases = function() {
 		Sheath.toPhase('sync')
 		Sheath.toPhase('async')
 	}
-})(window || typeof module === 'object' && typeof module.exports === 'object' && module.exports || this, typeof window === 'object')
+	inBrowser
+		? (window.onload = advancePhases)
+		: setTimeout(advancePhases)
+	
+	return sheath
+})

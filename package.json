@@ -1,0 +1,32 @@
+{
+  "name": "sheath.js",
+  "version": "0.1.0",
+  "description": "The Module Library",
+  "main": "src/sheath.js",
+  "directories": {
+    "example": "examples",
+    "test": "tests"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "jest-cli": "^17.0.3"
+  },
+  "scripts": {
+    "test": "jest"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bowheart/sheath.js.git"
+  },
+  "keywords": [
+    "module",
+    "dependency",
+    "injection"
+  ],
+  "author": "Joshua Claunch",
+  "license": "MIT",
+  "bugs": {
+    "url": "https://github.com/bowheart/sheath.js/issues"
+  },
+  "homepage": "https://github.com/bowheart/sheath.js#readme"
+}

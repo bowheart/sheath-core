@@ -4,7 +4,7 @@ sheath('app', ['one', 'two', 'three'], function(one, two, three) {
 
 
 sheath('one', ['one-a', 'one-b', 'one-c'], function(a, b, c) {
-	return 'one <br>' + [a, b, c].join('<br>')
+	return 'one<br>' + [a, b, c].join('<br>')
 })
 
 sheath('one-a', function() {
@@ -16,7 +16,7 @@ sheath('one-b', function() {
 })
 
 sheath('one-c', ['one-c-i', 'one-c-ii'], function(one, two) {
-	return 'one-c <br>' + [one, two].join('<br>')
+	return 'one-c<br>' + [one, two].join('<br>')
 })
 sheath('one-c-i', function() {
 	return 'one-c-i'
