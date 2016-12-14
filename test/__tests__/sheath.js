@@ -1,6 +1,6 @@
 'use strict'
 
-const sheath = require('../src/sheath')
+const sheath = require('../../src/sheath')
 
 
 
@@ -50,32 +50,15 @@ describe('sheath()', () => {
 			expect(result).toBe('visage1visage3')
 		})
 	})
-})
-
-
-
-describe('sheath.const()', () => {
-	it('sets an individual value', () => {
-		sheath.const('key1', 'val1')
-		expect(sheath.const('key1')).toBe('val1')
-	})
 	
-	it('sets multiple values', () => {
-		sheath.const({
-			key2: 'val2',
-			key3: 'val3'
+	it('loads undeclared modules asynchronously', () => {
+		return new Promise((resolve) => {
+			sheath('module5', 'test/async-module', (module) => {
+				resolve(module)
+				return 'visage5'
+			})
+		}).then((result) => {
+			expect(result).toBe('async-visage')
 		})
-		expect(sheath.const('key2')).toBe('val2')
-		expect(sheath.const('key3')).toBe('val3')
-	})
-	
-	it('freezes objects', () => {
-		let arr = [1, 3, 5]
-		sheath.const('key4', arr)
-		expect(Object.isFrozen(sheath.const('key4'))).toBe(true)
-	})
-	
-	it('disallows overrides', () => {
-		expect(sheath.const.bind(null, 'key1', 'new-val')).toThrowError(/overwrite disallowed/i)
 	})
 })

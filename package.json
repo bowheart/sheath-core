@@ -28,5 +28,8 @@
   "bugs": {
     "url": "https://github.com/bowheart/sheath.js/issues"
   },
-  "homepage": "https://github.com/bowheart/sheath.js#readme"
+  "homepage": "https://github.com/bowheart/sheath.js#readme",
+  "jest": {
+    "collectCoverage": false
+  }
 }
