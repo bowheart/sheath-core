@@ -1,6 +1,6 @@
 'use strict'
 
-const sheath = require('../../src/sheath')
+const sheath = require('../../../src/sheath')
 
 
 

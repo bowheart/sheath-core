@@ -1,10 +1,27 @@
 'use strict'
 
-const sheath = require('../../src/sheath')
+const sheath = require('../../../src/sheath')
 
 
 
 describe('sheath()', () => {
+	it('asserts that the name is a string', () => {
+		expect(sheath.bind(null, {}, () => {})).toThrowError(/expects .* a string/i)
+	})
+	
+	it('asserts that a function is passed', () => {
+		expect(sheath.bind(null, 'invalid', 'func')).toThrowError(/expects .*a function/i)
+		expect(sheath.bind(null, 'invalid', [], 'func')).toThrowError(/expects .*a function/i)
+	})
+	
+	it('asserts that the deps is a string or array', () => {
+		expect(sheath.bind(null, 'invalid', {}, () => {})).toThrowError(/string or array/i)
+		expect(sheath.bind(null, 'valid1', [], () => {})).not.toThrow()
+		console.warn = jest.fn()
+		expect(sheath.bind(null, 'valid2', 'deps', () => {})).not.toThrow()
+		expect(sheath.bind(null, 'valid3', () => {})).not.toThrow()
+	})
+	
 	it('creates a module', () => {
 		return new Promise((resolve) => {
 			sheath('module1', () => {
@@ -59,6 +76,14 @@ describe('sheath()', () => {
 			})
 		}).then((result) => {
 			expect(result).toBe('async-visage')
+		})
+	})
+	
+	it('cannot declare two modules with the same name', () => {
+		return new Promise((resolve) => {
+			setTimeout(resolve)
+		}).then((result) => {
+			expect(sheath.bind(null, 'module5', () => {})).toThrowError(/multiple modules .*same name/i)
 		})
 	})
 })

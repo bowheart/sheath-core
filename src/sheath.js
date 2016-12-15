@@ -20,7 +20,8 @@
 			if (this.declaredModules[module.name]) throw new Error('Sheath.js Error: Multiple modules with the same name found. Name: "' + module.name + '"')
 			this.declaredModules[module.name] = module
 			
-			if (this.devMode && this.dependents[module.name]) {
+			if (!this.dependents[module.name]) this.dependents[module.name] = []
+			if (this.devMode && this.dependents[module.name].length) {
 				this.checkCircularDep(module) // this module has been listed as a dependency of other modules; check for circular dependencies (devMode only)
 			}
 		},
@@ -100,7 +101,7 @@
 		
 		implementLoadAsync: function(name, filename) {
 			if (!filename) return // no file found for this module
-			if (inBrowser && [].filter.call(document.scripts, function(script) { return script.getAttribute('src') === filename }).length) {
+			if (inBrowser && document.scripts && [].filter.call(document.scripts, function(script) { return script.getAttribute('src') === filename }).length) {
 				if (this.devMode) console.warn('Sheath.js Warning: file "' + filename + '" already loaded, but no declaration found for module "' + name + '"')
 				return // this script has already been loaded
 			}
@@ -130,7 +131,7 @@
 			var script = document.createElement('script')
 			if (this.devMode) {
 				script.onerror = function() {
-					console.warn('Sheath.js Warning: Attempt to fetch module "' + name + '" failed. Potential hang situation.')
+					console.warn('Sheath.js Warning: Attempt to lazy-load module "' + name + '" failed. Potential hang situation.')
 				}
 				script.onload = function() {
 					if (!this.declaredModules[name]) {
@@ -147,7 +148,7 @@
 				this.fs || (this.fs = require('fs'))
 				eval(this.fs.readFileSync(filename).toString())
 			} catch (exception) {
-				console.warn('Sheath.js Warning: Attempt to fetch module "' + name + '" failed. Potential hang situation')
+				console.warn('Sheath.js Warning: Attempt to find module "' + name + '" failed. Potential hang situation.')
 			}
 		},
 		
@@ -313,7 +314,16 @@
 			defFunc = deps
 			deps = []
 		}
+		if (typeof name !== 'string') {
+			throw new TypeError('Sheath.js Error: sheath() expects the name to be a string. Received "' + typeof name + '".')
+		}
+		if (typeof defFunc !== 'function') {
+			throw new TypeError('Sheath.js Error: sheath() expects the module definition to be a function. Received "' + typeof defFunc + '".')
+		}
 		if (typeof deps === 'string') deps = [deps] // if 'deps' is a string, make it the only dependency
+		if (!Array.isArray(deps)) {
+			throw new TypeError('Sheath.js Error: sheath() expects the deps to be a string or array of strings. Received "' + typeof deps + '".')
+		}
 		if (Sheath.phase === 'config') {
 			Sheath.initialModules.push({name: name, deps: deps, defFunc: defFunc})
 			return
@@ -358,13 +368,17 @@
 		A config method.
 	*/
 	sheath.baseModel = function(baseModel) {
-		if (!baseModel) return Sheath.baseModel
+		if (typeof baseModel === 'undefined') return Sheath.baseModel
 		
 		if (Sheath.phase !== 'config') {
 			throw new Error('Sheath.js Error: baseModel can only be set in the config phase.')
 		}
 		if (typeof baseModel !== 'object') {
 			throw new TypeError('Sheath.js Error: baseModel must be an object or null. Found "' + typeof baseModel + '"')
+		}
+		if (baseModel === null) {
+			Sheath.baseModel = null
+			return sheath
 		}
 		
 		var constructor = baseModel.init || function ModelBase() {}
@@ -453,6 +467,20 @@
 	
 	
 	/*
+		sheath.emulateBrowser() -- A getter/setter for whether Sheath is currently running in browser-mode.
+		A config method.
+	*/
+	sheath.emulateBrowser = function(val) {
+		if (typeof val === 'undefined') return inBrowser
+		if (Sheath.phase !== 'config') {
+			throw new Error('Sheath.js Error: Browser emulation can only be modified during the config phase.')
+		}
+		inBrowser = Boolean(val)
+		return sheath // for chaining
+	}
+	
+	
+	/*
 		sheath.export() -- Create a fragment on the module currently being defined.
 		Can be injected into other modules using the fragmentAccessor
 		A getter/setter
@@ -491,7 +519,7 @@
 		An analysis tool.
 	*/
 	sheath.missing = function() {
-		return Sheath.undeclaredModules()
+		return Sheath.undeclaredModules(true)
 	}
 	
 	
@@ -590,7 +618,13 @@
 			func = deps
 			deps = []
 		}
+		if (typeof func !== 'function') {
+			throw new TypeError('Sheath.js Error: sheath.run() expects a function. Received "' + typeof func + '".')
+		}
 		if (typeof deps === 'string') deps = [deps] // if 'deps' is a string, make it the only dependency
+		if (!Array.isArray(deps)) {
+			throw new TypeError('Sheath.js Error: sheath.run() expects the deps to be a string or array of strings. Received "' + typeof deps + '".')
+		}
 		if (Sheath.phase === 'config') {
 			Sheath.initialModules.push({name: '', deps: deps, defFunc: func})
 			return
@@ -603,10 +637,16 @@
 	
 	
 	
-	// Once all the initial scripts have been loaded, run the sync phase, then turn on asychronous loading and request any not-yet-declared modules.
+	/*
+		Once all the initial scripts have been loaded:
+		Run the sync phase, then:
+		Turn on asychronous loading and request any not-yet-declared modules.
+	*/
 	var advancePhases = function() {
 		Sheath.toPhase('sync')
-		Sheath.toPhase('async')
+		
+		// setTimeout -- allow any deferred tasks set during the sync phase to complete before advancing to the async phase
+		setTimeout(Sheath.toPhase.bind(Sheath, 'async'))
 	}
 	inBrowser
 		? (window.onload = advancePhases)
