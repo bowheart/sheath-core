@@ -9,6 +9,7 @@
   },
   "dependencies": {},
   "devDependencies": {
+    "codeclimate-test-reporter": "^0.4.0",
     "jest-cli": "^17.0.3"
   },
   "scripts": {
@@ -30,6 +31,6 @@
   },
   "homepage": "https://github.com/bowheart/sheath.js#readme",
   "jest": {
-    "collectCoverage": false
+    "collectCoverage": true
   }
 }

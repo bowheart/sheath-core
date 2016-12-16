@@ -9,7 +9,7 @@
 	serverSide
 		? module.exports = sheath
 		: outside.sheath = sheath
-})(this, function(inBrowser) {
+}(this, function(inBrowser) {
 	/*
 		Sheath -- A private utility to keep track of modules.
 		Moves all modules through this process:
@@ -65,13 +65,13 @@
 			if (!result) return
 			
 			modules.push(modules[0])
-			console.warn('Sheath.js Warning: Circular dependency detected.\n\n', '    {' + modules.join('} -> {') + '}')
+			console.warn('Sheath.js Warning: Circular dependency detected.\n\n    {' + modules.join('} -> {') + '}')
 		},
 		
 		declareInitialModules: function() {
 			for (var i = 0; i < this.initialModules.length; i++) {
 				var module = this.initialModules[i]
-				new Module(module.name, module.deps, module.defFunc)
+				moduleFactory(module.name, module.deps, module.defFunc)
 			}
 		},
 		
@@ -80,22 +80,22 @@
 			this.constants[key] = val
 		},
 		
-		// A simple Depth-First Search used for circular dependency detection.
-		dfs: function(modulesEncountered, nextModule) {
-			if (!nextModule) return false
-			if (~modulesEncountered.indexOf(nextModule.name)) return true
+		// A simple Depth-First Search used to detect back edges (circular dependencies).
+		dfs: function(chain, currentModule) {
+			if (!currentModule) return false
+			if (currentModule.name === chain[0]) return true // back edge found
+			if (~chain.indexOf(currentModule.name)) return false // back edge found, but not involving target node; ignore
 			
-			modulesEncountered.push(nextModule.name)
-			var lastIndex = modulesEncountered.length,
-				deps = nextModule.deps,
+			chain.push(currentModule.name) // put the current module on there
+			var deps = currentModule.deps,
 				depsKeys = Object.keys(deps)
 			
 			for (var i = 0; i < depsKeys.length; i++) {
-				var result = this.dfs(modulesEncountered, this.declaredModules[deps[depsKeys[i]].name])
+				var result = this.dfs(chain, this.declaredModules[deps[depsKeys[i]].name])
 				
 				if (result) return result
-				modulesEncountered.splice(lastIndex) // no circles down that branch; remove that branch from the tree
 			}
+			chain.pop() // not found down this chain; take the current module off of there and go back up
 			return false
 		},
 		
@@ -146,7 +146,9 @@
 		loadAsyncServer: function(name, filename) {
 			try {
 				this.fs || (this.fs = require('fs'))
-				eval(this.fs.readFileSync(filename).toString())
+				this.vm || (this.vm = require('vm'))
+				this.context || (this.context = this.vm.createContext({sheath: sheath}))
+				this.vm.runInContext(this.fs.readFileSync(filename).toString(), this.context)
 			} catch (exception) {
 				console.warn('Sheath.js Warning: Attempt to find module "' + name + '" failed. Potential hang situation.')
 			}
@@ -227,8 +229,6 @@
 		this.exports = {}
 		
 		this.mapDeps()
-		this.declare()
-		this.define() // attempt to define this module synchronously, in case there are no deps
 	}
 	Module.prototype = {
 		declare: function() {
@@ -292,6 +292,12 @@
 		}
 	}
 	
+	function moduleFactory(name, deps, defFunc) {
+		var newModule = new Module(name, deps, defFunc)
+		newModule.declare()
+		newModule.define() // attempt to define this module synchronously, in case there are no deps
+	}
+	
 	
 	
 	
@@ -328,7 +334,7 @@
 			Sheath.initialModules.push({name: name, deps: deps, defFunc: defFunc})
 			return
 		}
-		new Module(name, deps, defFunc)
+		moduleFactory(name, deps, defFunc)
 		return sheath // for chaining
 	}
 	
@@ -629,7 +635,7 @@
 			Sheath.initialModules.push({name: '', deps: deps, defFunc: func})
 			return
 		}
-		new Module('', deps, func)
+		moduleFactory('', deps, func)
 		return sheath // for chaining
 	}
 	
@@ -653,4 +659,4 @@
 		: setTimeout(advancePhases)
 	
 	return sheath
-})
+}))

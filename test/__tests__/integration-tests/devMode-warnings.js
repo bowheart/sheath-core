@@ -45,4 +45,21 @@ describe.only('devMode enables advanced analysis and debugging tools', () => {
 			expect(console.warn).toHaveBeenCalledTimes(1)
 		})
 	})
+	
+	it('logs a warning when a script tag exists, but its related module does not', () => {
+		return new Promise((resolve) => {
+			document.scripts = [{
+				getAttribute: jest.fn(() => 'nonexistent-module2.js')
+			}]
+			setTimeout(() => {
+				console.warn = (warning) => {
+					resolve(warning)
+				}
+				sheath('module3', 'nonexistent-module2', () => {})
+			})
+		}).then((result) => {
+			expect(document.scripts[0].getAttribute).toHaveBeenCalledWith('src')
+			expect(result).toMatch(/file.*already loaded.*no declaration found/i)
+		})
+	})
 })
