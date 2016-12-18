@@ -15,9 +15,9 @@ describe('sheath.emulateBrowser()', () => {
 	})
 	
 	it('cannot be modified after the config phase', () => {
-		return new Promise((resolve) => {
+		return new Promise(resolve => {
 			setTimeout(resolve)
-		}).then((result) => {
+		}).then(result => {
 			expect(sheath.emulateBrowser.bind(null, false)).toThrowError(/config phase/i)
 		})
 	})

@@ -255,14 +255,14 @@
 		mapDeps: function() {
 			var mappedDeps = {}
 			for (var i = 0; i < this.deps.length; i++) {
-				var dep = this.deps[i],
-					isImport = Sheath.fragmentAccessor && ~dep.indexOf(Sheath.fragmentAccessor),
-					pieces = dep.split(Sheath.fragmentAccessor)
-					
+				var depName = this.deps[i],
+					pieces = depName.split(Sheath.fragmentAccessor).filter(function(node) { return node }),
+					isImport = Sheath.fragmentAccessor && pieces.length > 1
+				
 				var mappedDep = {
 					index: i,
-					import: isImport ? pieces.pop() : false,
-					name: pieces.join(Sheath.fragmentAccessor)
+					name: isImport ? pieces.shift() : depName,
+					import: isImport ? pieces : false
 				}
 				Sheath.addDependent(this, mappedDep.name)
 				mappedDeps[mappedDep.name] = mappedDep
@@ -272,17 +272,27 @@
 		},
 		
 		resolveDep: function(resolvedDep) {
-			var dep = this.deps[resolvedDep.name]
+			var depInfo = this.deps[resolvedDep.name]
 			
-			// if the resolvedDep is actually supposed to be a submodule, grab that, otherwise, grab the resolvedDep's visage
-			resolvedDep = dep.import
-				? resolvedDep.visage[dep.import] || resolvedDep.exports[dep.import]
+			// If the dep is a fragment grab that, otherwise grab the resolvedDep's visage.
+			var resolvedVal = depInfo.import
+				? resolvedDep.resolveExport(depInfo.import)
 				: resolvedDep.visage
-				
-			this.resolvedDeps[dep.index] = resolvedDep
+			
+			this.resolvedDeps[depInfo.index] = resolvedVal
 			
 			this.depsLeft--
 			this.define()
+		},
+		
+		resolveExport: function(exportPath, namespace) {
+			var nextNode = exportPath.shift(), // shift() -- we should only need it once, so mutate away
+				val = namespace ? namespace[nextNode] : this.exports[nextNode] || this.visage[nextNode]
+			
+			// Don't attempt to go any deeper if the val at this level is undefined or null.
+			if (typeof val === 'undefined' || val === null) return val
+			
+			return exportPath.length ? this.resolveExport(exportPath, val) : val
 		},
 		
 		resolveReadyDeps: function() {
@@ -639,6 +649,13 @@
 		return sheath // for chaining
 	}
 	
+	
+	/*
+		sheath.toString() -- Just for flair, override the default toString() method.
+	*/
+	sheath.toString = function() {
+		return 'I Am Sheath'
+	}
 	
 	
 	

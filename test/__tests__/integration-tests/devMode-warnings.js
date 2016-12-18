@@ -4,12 +4,12 @@ const sheath = require('../../../src/sheath')
 
 
 
-describe.only('devMode enables advanced analysis and debugging tools', () => {
+describe('devMode enables advanced analysis and debugging tools', () => {
 	sheath.devMode(true)
 	sheath.emulateBrowser(true)
 	
 	it('logs a warning when an attempt to fetch an undeclared module asynchronously fails', () => {
-		return new Promise((resolve) => {
+		return new Promise(resolve => {
 			console.warn = jest.fn()
 			let mockScript = {}
 			document.createElement = () => mockScript
@@ -21,13 +21,13 @@ describe.only('devMode enables advanced analysis and debugging tools', () => {
 					resolve()
 				})
 			})
-		}).then((result) => {
+		}).then(result => {
 			expect(console.warn).toHaveBeenCalled()
 		})
 	})
 	
 	it('logs a warning when a lazy-loaded file does not contain the desired module', () => {
-		return new Promise((resolve) => {
+		return new Promise(resolve => {
 			console.warn = jest.fn()
 			let mockScript = {}
 			document.createElement = () => mockScript
@@ -41,13 +41,13 @@ describe.only('devMode enables advanced analysis and debugging tools', () => {
 					resolve()
 				})
 			})
-		}).then((result) => {
+		}).then(result => {
 			expect(console.warn).toHaveBeenCalledTimes(1)
 		})
 	})
 	
 	it('logs a warning when a script tag exists, but its related module does not', () => {
-		return new Promise((resolve) => {
+		return new Promise(resolve => {
 			document.scripts = [{
 				getAttribute: jest.fn(() => 'nonexistent-module2.js')
 			}]
@@ -57,7 +57,7 @@ describe.only('devMode enables advanced analysis and debugging tools', () => {
 				}
 				sheath('module3', 'nonexistent-module2', () => {})
 			})
-		}).then((result) => {
+		}).then(result => {
 			expect(document.scripts[0].getAttribute).toHaveBeenCalledWith('src')
 			expect(result).toMatch(/file.*already loaded.*no declaration found/i)
 		})

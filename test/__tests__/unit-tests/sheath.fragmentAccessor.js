@@ -24,9 +24,9 @@ describe('sheath.fragmentAccessor()', () => {
 	})
 	
 	it('cannot be modified after the config phase', () => {
-		return new Promise((resolve) => {
+		return new Promise(resolve => {
 			setTimeout(resolve)
-		}).then((result) => {
+		}).then(result => {
 			expect(sheath.fragmentAccessor.bind(null, '>')).toThrowError(/config phase/i)
 		})
 	})

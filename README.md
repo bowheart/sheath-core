@@ -1,12 +1,24 @@
+[![build status](https://travis-ci.org/bowheart/sheath.js.svg?branch=master)](https://travis-ci.org/bowheart/sheath.js)
+[![Test Coverage](https://codeclimate.com/github/bowheart/sheath.js/badges/coverage.svg)](https://codeclimate.com/github/bowheart/sheath.js/coverage)
+[![Issue Count](https://img.shields.io/codeclimate/issues/github/bowheart/sheath.js.svg)](https://codeclimate.com/github/bowheart/sheath.js/issues)
+[![Code Climate](https://codeclimate.com/github/bowheart/sheath.js/badges/gpa.svg)](https://codeclimate.com/github/bowheart/sheath.js)
+
 # Sheath.js
 
-Sheath is a utility library for modular applications, specifically designed for use with MVC frameworks such as Backbone, React, and Mithril, but can also be used without a framework. It provides a clean, overly simplistic interface for defining modules. This includes dependency injection and asynchronous script loading. It also provides utilities for easily defining common types of modules (models/classes, objects, config, data-stores, etc).
+Sheath is a utility library for modular applications. It's *the* module library.
 
-Sheath is the module library.
+Check out Sheath's coolness list:
 
-## The Basics
+- A clean, overly simplistic interface for creating modules.
+- Dependency injection.
+- Asynchronous script loading.
+- Utilities for easily creating common types of modules.
+- A flow that works well with MVC frameworks such as Backbone, React, and Mithril.
+- Awesome debugging tools, including opt-in circular dependency detection.
+- Even awesomer dependency graph analysis tools available server-side for easy automation.
+- Highly optimized code. Most of Sheath's algorithms are simple lookups &ndash; O(1) time.
 
-### A simple example
+## A simple example
 
 Let's create a module.
 
@@ -41,15 +53,13 @@ Let's break this one down:
 
 Every module goes through this basic life cycle.
 
-> Tip: A module can be anything! Feel free to wrap every model, component, utility function, etc in its own module.
-
 ## To Be Continued...
 
-That's really all you need to get started. Take a look at the [github wiki](https://github.com/bowheart/sheath.js/wiki) for a more in-depth rundown and the full API documentation.
+That's really all you need to get started! Take a look at the [github wiki](https://github.com/bowheart/sheath.js/wiki) for a more in-depth rundown and the full API documentation.
 
 ## Bugs, Pull Requests, Feedback, Just Everything
 
-Bugs can be reported at the [github issues page](https://github.com/bowheart/sheath.js/issues). All suggestions and feedback are so super welcome. Also feel free to fork and pull request. Happy coding!
+Bugs can be reported at the [github issues page](https://github.com/bowheart/sheath.js/issues). All suggestions and feedback are so super welcome. Also feel free to fork and pull request &ndash; just make sure the tests pass (`npm test`) and try to keep the tests at ~100% coverage. Happy coding!
 
 ## License
 

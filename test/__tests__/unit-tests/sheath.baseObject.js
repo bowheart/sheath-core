@@ -30,9 +30,9 @@ describe('sheath.baseObject()', () => {
 	})
 	
 	it('cannot be modified after the config phase', () => {
-		return new Promise((resolve) => {
+		return new Promise(resolve => {
 			setTimeout(resolve)
-		}).then((result) => {
+		}).then(result => {
 			expect(sheath.baseObject.bind(null, {a: 2})).toThrowError(/config phase/i)
 		})
 	})

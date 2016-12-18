@@ -19,19 +19,19 @@ describe('sheath.run()', () => {
 	})
 	
 	it('defers execution until the config phase is over', () => {
-		return new Promise((resolve) => {
+		return new Promise(resolve => {
 			sheath.run(() => {
 				resolve(sheath.phase())
 			})
-		}).then((result) => {
+		}).then(result => {
 			expect(result).toBe('sync')
 		})
 	})
 	
 	it('does not defer after the config phase when there are no dependencies', () => {
-		return new Promise((resolve) => {
+		return new Promise(resolve => {
 			setTimeout(resolve)
-		}).then((result) => {
+		}).then(result => {
 			let str = 'one'
 			sheath.run(() => {
 				str += 'two'
@@ -42,23 +42,23 @@ describe('sheath.run()', () => {
 	})
 	
 	it('injects a module', () => {
-		return new Promise((resolve) => {
+		return new Promise(resolve => {
 			sheath('module1', () => 'visage1')
 			sheath.run('module1', (module1) => {
 				resolve(module1)
 			})
-		}).then((result) => {
+		}).then(result => {
 			expect(result).toBe('visage1')
 		})
 	})
 	
 	it('injects multiple modules', () => {
-		return new Promise((resolve) => {
+		return new Promise(resolve => {
 			sheath('module2', () => 'visage2')
 			sheath.run(['module1', 'module2'], (module1, module2) => {
 				resolve(module1 + module2)
 			})
-		}).then((result) => {
+		}).then(result => {
 			expect(result).toBe('visage1visage2')
 		})
 	})

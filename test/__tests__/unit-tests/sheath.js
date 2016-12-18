@@ -23,18 +23,18 @@ describe('sheath()', () => {
 	})
 	
 	it('creates a module', () => {
-		return new Promise((resolve) => {
+		return new Promise(resolve => {
 			sheath('module1', () => {
 				resolve('module created')
 				return 'visage1'
 			})
-		}).then((result) => {
+		}).then(result => {
 			expect(result).toBe('module created')
 		})
 	})
 	
 	it('injects a module', () => {
-		return new Promise((resolve) => {
+		return new Promise(resolve => {
 			sheath('module2', 'module1', (module1) => {
 				resolve(module1)
 				return 'visage2'
@@ -45,7 +45,7 @@ describe('sheath()', () => {
 	})
 	
 	it('waits for dependencies to be defined before injecting', () => {
-		return new Promise((resolve) => {
+		return new Promise(resolve => {
 			sheath('module3', 'module3b', (module3b) => {
 				resolve(module3b)
 				return 'visage3'
@@ -58,32 +58,48 @@ describe('sheath()', () => {
 	})
 	
 	it('injects multiple modules', () => {
-		return new Promise((resolve) => {
+		return new Promise(resolve => {
 			sheath('module4', ['module1', 'module3'], (module1, module3) => {
 				resolve(module1 + module3)
 				return 'visage4'
 			})
-		}).then((result) => {
+		}).then(result => {
 			expect(result).toBe('visage1visage3')
 		})
 	})
 	
+	it('can be chained', () => {
+		return new Promise(resolve => {
+			sheath('module5', () => 'visage5')
+				('module6', 'module5', (module5) => {
+					resolve(module5)
+					return 'visage6'
+				})
+		}).then(result => {
+			expect(result).toBe('visage5')
+		})
+	})
+	
 	it('loads undeclared modules asynchronously', () => {
-		return new Promise((resolve) => {
-			sheath('module5', 'test/async-module', (module) => {
+		return new Promise(resolve => {
+			sheath('module7', 'test/async-module', (module) => {
 				resolve(module)
-				return 'visage5'
+				return 'visage7'
 			})
-		}).then((result) => {
+		}).then(result => {
 			expect(result).toBe('async-visage')
 		})
 	})
 	
 	it('cannot declare two modules with the same name', () => {
-		return new Promise((resolve) => {
+		return new Promise(resolve => {
 			setTimeout(resolve)
-		}).then((result) => {
-			expect(sheath.bind(null, 'module5', () => {})).toThrowError(/multiple modules .*same name/i)
+		}).then(result => {
+			expect(sheath.bind(null, 'module7', () => {})).toThrowError(/multiple modules .*same name/i)
 		})
+	})
+	
+	it('has a cool name (the toString() method is overridden)', () => {
+		expect(sheath.toString()).toBe('I Am Sheath')
 	})
 })

@@ -34,9 +34,9 @@ describe('sheath.baseModel()', () => {
 	})
 	
 	it('cannot be modified after the config phase', () => {
-		return new Promise((resolve) => {
+		return new Promise(resolve => {
 			setTimeout(resolve)
-		}).then((result) => {
+		}).then(result => {
 			expect(sheath.baseModel.bind(null, {a: 2})).toThrowError(/config phase/i)
 		})
 	})

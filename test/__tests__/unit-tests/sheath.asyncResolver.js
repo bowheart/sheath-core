@@ -17,9 +17,9 @@ describe('sheath.asyncResolver()', () => {
 	})
 	
 	it('cannot be modified after the config phase', () => {
-		return new Promise((resolve) => {
+		return new Promise(resolve => {
 			setTimeout(resolve)
-		}).then((result) => {
+		}).then(result => {
 			expect(sheath.asyncResolver.bind(null, module => 'js/' + module)).toThrowError(/config phase/i)
 		})
 	})

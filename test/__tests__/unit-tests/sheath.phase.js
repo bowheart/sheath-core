@@ -10,20 +10,20 @@ describe('sheath.phase()', () => {
 	})
 	
 	it('returns "sync" during the sync phase', () => {
-		return new Promise((resolve) => {
+		return new Promise(resolve => {
 			sheath.run(() => {
 				resolve(sheath.phase())
 			})
-		}).then((result) => {
+		}).then(result => {
 			expect(result).toBe('sync')
 			expect(sheath.phase()).toBe('sync')
 		})
 	})
 	
 	it('returns "async" during the async phase', () => {
-		return new Promise((resolve) => {
+		return new Promise(resolve => {
 			setTimeout(resolve)
-		}).then((result) => {
+		}).then(result => {
 			expect(sheath.phase()).toBe('async')
 		})
 	})

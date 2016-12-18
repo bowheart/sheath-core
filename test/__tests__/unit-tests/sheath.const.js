@@ -36,23 +36,23 @@ describe('sheath.const()', () => {
 	})
 	
 	it('sets/gets a value during the sync phase', () => {
-		return new Promise((resolve) => {
+		return new Promise(resolve => {
 			sheath.run(() => {
 				sheath.const('key6', 'val6')
 				resolve(sheath.const('key5') + sheath.const('key6'))
 			})
-		}).then((result) => {
+		}).then(result => {
 			expect(result).toBe('val5val6')
 		})
 	})
 	
 	it('sets/gets a value during the async phase', () => {
-		return new Promise((resolve) => {
+		return new Promise(resolve => {
 			setTimeout(() => {
 				sheath.const('key7', 'val7')
 				resolve(sheath.const('key6') + sheath.const('key7'))
 			})
-		}).then((result) => {
+		}).then(result => {
 			expect(result).toBe('val6val7')
 		})
 	})

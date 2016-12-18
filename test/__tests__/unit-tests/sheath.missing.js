@@ -6,18 +6,18 @@ const sheath = require('../../../src/sheath')
 
 describe('sheath.missing()', () => {
 	it('returns an empty array when there are no missing modules', () => {
-		return new Promise((resolve) => {
+		return new Promise(resolve => {
 			sheath.run(resolve)
-		}).then((result) => {
+		}).then(result => {
 			sheath('module1', () => {})
 			expect(sheath.missing()).toHaveLength(0)
 		})
 	})
 	
 	it('returns the name of a missing module and lists all its dependents', () => {
-		return new Promise((resolve) => {
+		return new Promise(resolve => {
 			sheath.run(resolve)
-		}).then((result) => {
+		}).then(result => {
 			sheath('module2', 'missing-module', () => {})
 			sheath('module3', 'missing-module', () => {})
 			let missing = sheath.missing()
@@ -30,9 +30,9 @@ describe('sheath.missing()', () => {
 	})
 	
 	it('returns all missing modules', () => {
-		return new Promise((resolve) => {
+		return new Promise(resolve => {
 			sheath.run(resolve)
-		}).then((result) => {
+		}).then(result => {
 			sheath('module4', ['missing-module2', 'missing-module3'], () => {})
 			sheath('module5', 'missing-module4', () => {})
 			let missing = sheath.missing()

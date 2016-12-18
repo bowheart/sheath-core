@@ -11,26 +11,26 @@ describe('sheath.object()', () => {
 	})
 	
 	it('asserts that the object is an object', () => {
-		return new Promise((resolve) => {
+		return new Promise(resolve => {
 			sheath.run(resolve)
-		}).then((result) => {
+		}).then(result => {
 			expect(sheath.object.bind(null, 'the-object')).toThrowError(/must be an object/i)
 		})
 	})
 	
 	it('creates an empty object if neither parent nor object is specified', () => {
-		return new Promise((resolve) => {
+		return new Promise(resolve => {
 			sheath.run(resolve)
-		}).then((result) => {
+		}).then(result => {
 			let object = sheath.object()
 			expect(typeof object).toBe('object')
 		})
 	})
 	
 	it('returns a deep copy of the object', () => {
-		return new Promise((resolve) => {
+		return new Promise(resolve => {
 			sheath.run(resolve)
-		}).then((result) => {
+		}).then(result => {
 			let object = {a: 1}
 			let sheathObject = sheath.object(object)
 			expect(sheathObject).not.toBe(object)
@@ -39,9 +39,9 @@ describe('sheath.object()', () => {
 	})
 	
 	it('cleans the prototype, by default', () => {
-		return new Promise((resolve) => {
+		return new Promise(resolve => {
 			sheath.run(resolve)
-		}).then((result) => {
+		}).then(result => {
 			let object = sheath.object()
 			expect(object.toString).toBe(undefined)
 			expect(proto(object)).toBe(null)
@@ -49,17 +49,17 @@ describe('sheath.object()', () => {
 	})
 	
 	it('asserts that the parent is an object, if specified', () => {
-		return new Promise((resolve) => {
+		return new Promise(resolve => {
 			sheath.run(resolve)
-		}).then((result) => {
+		}).then(result => {
 			expect(sheath.object.bind(null, 'the-parent', {})).toThrowError(/must be an object/i)
 		})
 	})
 	
 	it('adds the parent to the prototype chain', () => {
-		return new Promise((resolve) => {
+		return new Promise(resolve => {
 			sheath.run(resolve)
-		}).then((result) => {
+		}).then(result => {
 			let parentObj = {a: 1}
 			let parent = sheath.object(parentObj)
 			let childObj = {b: 2}
@@ -73,9 +73,9 @@ describe('sheath.object()', () => {
 	})
 	
 	it('allows the child to override a property on the parent', () => {
-		return new Promise((resolve) => {
+		return new Promise(resolve => {
 			sheath.run(resolve)
-		}).then((result) => {
+		}).then(result => {
 			let parent = sheath.object({
 				func() {return 1},
 			})
@@ -87,9 +87,9 @@ describe('sheath.object()', () => {
 	})
 	
 	it('supports grandchildren, great-grandchildren, etc', () => {
-		return new Promise((resolve) => {
+		return new Promise(resolve => {
 			sheath.run(resolve)
-		}).then((result) => {
+		}).then(result => {
 			let one = sheath.object()
 			let two = sheath.object(one, {})
 			let three = sheath.object(two, {})
@@ -104,9 +104,9 @@ describe('sheath.object()', () => {
 	})
 	
 	it('supports polymorphism', () => {
-		return new Promise((resolve) => {
+		return new Promise(resolve => {
 			sheath.run(resolve)
-		}).then((result) => {
+		}).then(result => {
 			let parent = sheath.object()
 			let a = sheath.object(parent, {a: true})
 			let b = sheath.object(parent, {b: true})
