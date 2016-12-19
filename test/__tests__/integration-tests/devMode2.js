@@ -4,11 +4,11 @@ const sheath = require('../../../src/sheath')
 
 
 
-describe('devMode enables more advanced analysis and debugging tools', () => {
+describe('devMode enables more advanced debugging tools', () => {
 	sheath.emulateBrowser(true)
-	sheath.devMode(true)
+	sheath.mode('dev')
 	sheath.async(false)
-	
+
 	it('logs a warning when lazy-loading is disabled, sync phase has ended, and undeclared modules are found', () => {
 		return new Promise(resolve => {
 			console.warn = (warning) => {
@@ -19,7 +19,7 @@ describe('devMode enables more advanced analysis and debugging tools', () => {
 			expect(result).toMatch(/lazy-loading disabled.*sync phase ended.*undeclared modules/i)
 		})
 	})
-	
+
 	it('logs a warning when a simple circular dependency is detected', () => {
 		return new Promise(resolve => {
 			setTimeout(() => {

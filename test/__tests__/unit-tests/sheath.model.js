@@ -9,15 +9,15 @@ describe('sheath.model()', () => {
 	it('cannot be called during the config phase', () => {
 		expect(sheath.model.bind(null, {})).toThrowError(/config phase/i)
 	})
-	
+
 	it('asserts that the model is an object', () => {
 		return new Promise(resolve => {
 			sheath.run(resolve)
 		}).then(result => {
-			expect(sheath.model.bind(null, '')).toThrowError(/must be an object/i)
+			expect(sheath.model.bind(null, '')).toThrowError(/expects.*an object/i)
 		})
 	})
-	
+
 	it('creates a JavaScript "class" constructor', () => {
 		return new Promise(resolve => {
 			sheath.run(resolve)
@@ -27,7 +27,7 @@ describe('sheath.model()', () => {
 			expect(new Model().a).toBe(1)
 		})
 	})
-	
+
 	it('asserts that the "init" property is a function, if specified', () => {
 		return new Promise(resolve => {
 			sheath.run(resolve)
@@ -35,7 +35,7 @@ describe('sheath.model()', () => {
 			expect(sheath.model.bind(null, {init: 'init'})).toThrowError(/must be a function/i)
 		})
 	})
-	
+
 	it('makes the "init" property the constructor, if specified', () => {
 		return new Promise(resolve => {
 			sheath.run(resolve)
@@ -46,7 +46,7 @@ describe('sheath.model()', () => {
 			expect(new Model().a).toBe(1)
 		})
 	})
-	
+
 	it('cleans the prototype, by default', () => {
 		return new Promise(resolve => {
 			sheath.run(resolve)
@@ -55,7 +55,7 @@ describe('sheath.model()', () => {
 			expect(new Model().toString).toBe(undefined)
 		})
 	})
-	
+
 	it('sets the super property to null when there is no parent', () => {
 		return new Promise(resolve => {
 			sheath.run(resolve)
@@ -64,15 +64,15 @@ describe('sheath.model()', () => {
 			expect(new Model().super).toBe(null)
 		})
 	})
-	
+
 	it('asserts that the parent is a function, if specified', () => {
 		return new Promise(resolve => {
 			sheath.run(resolve)
 		}).then(result => {
-			expect(sheath.model.bind(null, 'the-parent', {})).toThrowError(/must be a .*function/i)
+			expect(sheath.model.bind(null, 'the-parent', {})).toThrowError(/expects.* a .*function/i)
 		})
 	})
-	
+
 	it('adds the prototype of the parent function to the prototype chain', () => {
 		return new Promise(resolve => {
 			sheath.run(resolve)
@@ -86,7 +86,7 @@ describe('sheath.model()', () => {
 			expect(proto(proto(child))).toBe(Parent.prototype)
 		})
 	})
-	
+
 	it('sets the super property to the parent', () => {
 		return new Promise(resolve => {
 			sheath.run(resolve)
@@ -97,7 +97,7 @@ describe('sheath.model()', () => {
 			expect(child.super).toBe(Parent.prototype)
 		})
 	})
-	
+
 	it('allows the child to override a property on the parent', () => {
 		return new Promise(resolve => {
 			sheath.run(resolve)
@@ -115,7 +115,7 @@ describe('sheath.model()', () => {
 			expect(child.func2()).toBe(7)
 		})
 	})
-	
+
 	it('supports grandchildren, great-grandchildren, etc', () => {
 		return new Promise(resolve => {
 			sheath.run(resolve)
@@ -133,7 +133,7 @@ describe('sheath.model()', () => {
 			expect(five.super.super.super.super.super).toBe(null)
 		})
 	})
-	
+
 	it('supports polymorphism', () => {
 		return new Promise(resolve => {
 			sheath.run(resolve)
