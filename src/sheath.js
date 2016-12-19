@@ -99,6 +99,13 @@
 			return false
 		},
 		
+		extend: function(a, b) {
+			Object.keys(b).forEach(function(key) {
+				a[key] = b[key]
+			})
+			return a
+		},
+		
 		implementLoadAsync: function(name, filename) {
 			if (!filename) return // no file found for this module
 			if (inBrowser && document.scripts && [].filter.call(document.scripts, function(script) { return script.getAttribute('src') === filename }).length) {
@@ -647,6 +654,44 @@
 		}
 		moduleFactory('', deps, func)
 		return sheath // for chaining
+	}
+	
+	
+	/*
+		sheath.store() -- Create a data-store on an array. Exposes all common, non-mutating methods of Array.prototype.
+	*/
+	var nonMutating = ['every', 'filter', 'forEach', 'indexOf', 'join', 'lastIndexOf', 'map', 'reduce', 'reduceRight', 'slice', 'some']
+	sheath.store = function(arr, props) {
+		if (!Array.isArray(arr)) {
+			throw new TypeError('Sheath.js Error: sheath.store() expects the first parameter to be an array. Received "' + typeof arr + '".')
+		}
+		if (props && typeof props !== 'object') {
+			throw new TypeError('Sheath.js Error: sheath.store() expects the second parameter, if given, to be an object. Received "' + typeof props + '".')
+		}
+		
+		var store = {}
+		
+		// Put all the non-mutating methods of Array.prototype on there.
+		for (var i = 0; i < nonMutating.length; i++) {
+			var key = nonMutating[i]
+			if (typeof arr[key] === 'function') store[key] = arr[key].bind(arr)
+		}
+		
+		// Put a length getter on there
+		Object.defineProperty(store, 'length', {
+			get: function() { return arr.length }
+		})
+		
+		// Make the store iterable (es6 only)
+		if (typeof Symbol === 'function' && Symbol.iterator) {
+			store[Symbol.iterator] = function StoreIterator() {
+				var index = 0
+				return {next: function() {
+					return arr[index] ? {value: arr[index++], done: false} : {done: true}
+				}}
+			}
+		}
+		return Sheath.extend(store, props || {})
 	}
 	
 	
