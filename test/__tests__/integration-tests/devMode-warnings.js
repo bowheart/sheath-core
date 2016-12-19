@@ -48,10 +48,11 @@ describe('devMode enables advanced analysis and debugging tools', () => {
 	
 	it('logs a warning when a script tag exists, but its related module does not', () => {
 		return new Promise(resolve => {
-			if (!document.scripts) document.scripts = []
-			document.scripts[0] = {
-				getAttribute: jest.fn(() => 'nonexistent-module2.js')
-			}
+			Object.defineProperty(document, 'scripts', {
+				value: [{
+					getAttribute: jest.fn(() => 'nonexistent-module2.js')
+				}]
+			})
 			setTimeout(() => {
 				console.warn = (warning) => {
 					resolve(warning)
