@@ -11,13 +11,14 @@ describe('sheath.current()', () => {
 		expect(console.warn).toHaveBeenCalled()
 	})
 	
-	it('returns the current of the module currently being defined', () => {
+	it('returns the moduleInterface of the module currently being defined', () => {
 		return new Promise(resolve => {
 			sheath('module1', () => {
 				resolve(sheath.current())
 			})
 		}).then(result => {
-			expect(result).toBe('module1')
+			expect(result.name).toBe('module1')
+			expect(typeof result.exports).toBe('object')
 		})
 	})
 	
@@ -27,7 +28,7 @@ describe('sheath.current()', () => {
 				resolve(nameGetter())
 			})
 			sheath('nameGetter', () => () => {
-				return sheath.current()
+				return sheath.current().name
 			})
 		}).then(result => {
 			expect(result).toBe('module2')

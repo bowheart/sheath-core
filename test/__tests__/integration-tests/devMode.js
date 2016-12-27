@@ -5,8 +5,7 @@ const sheath = require('../../../src/sheath')
 
 
 describe('devMode enables advanced debugging tools', () => {
-	sheath.mode('dev')
-	sheath.emulateBrowser(true)
+	sheath.mode('dev').emulateBrowser(true)
 
 	it('logs a warning when an attempt to fetch an undeclared module asynchronously fails', () => {
 		return new Promise(resolve => {

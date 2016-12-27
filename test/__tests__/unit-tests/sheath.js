@@ -5,6 +5,10 @@ const sheath = require('../../../src/sheath')
 
 
 describe('sheath()', () => {
+	it('just returns the result of calling name() if name is a function', () => {
+		expect(sheath(() => 'val')).toBe('val')
+	})
+	
 	it('asserts that the name is a string', () => {
 		expect(sheath.bind(null, {}, () => {})).toThrowError(/expects .* a string/i)
 	})
@@ -96,6 +100,18 @@ describe('sheath()', () => {
 			setTimeout(resolve)
 		}).then(result => {
 			expect(sheath.bind(null, 'module7', () => {})).toThrowError(/multiple modules .*same name/i)
+		})
+	})
+	
+	it('can access submodules of the current module using the Portal', () => {
+		return new Promise(resolve => {
+			sheath('module8', ['./one', './two'], (one, two) => {
+				resolve(one + two)
+			})
+			sheath('module8/one', () => 'one')
+			sheath('module8/two', () => 'two')
+		}).then(result => {
+			expect(result).toBe('onetwo')
 		})
 	})
 	

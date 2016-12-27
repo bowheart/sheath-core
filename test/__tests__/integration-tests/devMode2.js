@@ -5,9 +5,7 @@ const sheath = require('../../../src/sheath')
 
 
 describe('devMode enables more advanced debugging tools', () => {
-	sheath.emulateBrowser(true)
-	sheath.mode('dev')
-	sheath.async(false)
+	sheath.mode('dev').emulateBrowser(true).async(false)
 
 	it('logs a warning when lazy-loading is disabled, sync phase has ended, and undeclared modules are found', () => {
 		return new Promise(resolve => {

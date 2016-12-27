@@ -3,25 +3,25 @@ sheath('app', ['one', 'two', 'three'], function(one, two, three) {
 })
 
 
-sheath('one', ['one-a', 'one-b', 'one-c'], function(a, b, c) {
+sheath('one', ['./a', './b', './c'], function(a, b, c) {
 	return 'one<br>' + [a, b, c].join('<br>')
 })
 
-sheath('one-a', function() {
+sheath('one/a', function() {
 	return 'one-a'
 })
 
-sheath('one-b', function() {
+sheath('one/b', function() {
 	return 'one-b'
 })
 
-sheath('one-c', ['one-c-i', 'one-c-ii'], function(one, two) {
+sheath('one/c', ['./i', './ii'], function(one, two) {
 	return 'one-c<br>' + [one, two].join('<br>')
 })
-sheath('one-c-i', function() {
+sheath('one/c/i', function() {
 	return 'one-c-i'
 })
-sheath('one-c-ii', function() {
+sheath('one/c/ii', function() {
 	return 'one-c-ii'
 })
 
@@ -35,4 +35,4 @@ sheath('three', function() {
 	return 'three'
 })
 
-sheath.devMode(true)
+sheath.mode('dev')

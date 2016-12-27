@@ -182,7 +182,7 @@
 			}
 			this.loadAsync(undeclaredModules)
 		},
-
+		
 		// Turn all own properties of an object into their property descriptors
 		toPropertyDescriptors: function(obj) {
 			var propertyDescriptors = {}
@@ -191,16 +191,28 @@
 			})
 			return propertyDescriptors
 		},
-
+		
+		// A simple Depth-First Search used to find the optimal load-order of all modules in the given module's dependency graph.
+		tree: function(moduleName, modules) {
+			if (~modules.indexOf(moduleName)) return modules
+			
+			var module = this.definedModules[moduleName]
+			for (var i = 0; i < module.rawDeps.length; i++) {
+				this.tree(module.rawDeps[i], modules)
+			}
+			modules.push(moduleName)
+			return modules
+		},
+		
 		// undeclaredModules() -- Returns the list of all modules that have been listed as dependencies but never declared.
 		undeclaredModules: function(includeInfo) {
 			var self = this
-
+			
 			var moduleNames = Object.keys(this.dependents).filter(function(module) {
 				return !self.declaredModules[module] // find the dependencies that have never been declared
 			})
 			if (!includeInfo) return moduleNames
-
+			
 			// If a human's gonna read this, throw some extra info in there.
 			return moduleNames.map(function(moduleName) {
 				return {
@@ -209,27 +221,27 @@
 				}
 			})
 		},
-
+		
 		get devMode() { return this.mode === 'dev' || this.mode === 'analyze' },
 		get analyzeMode() { return this.mode === 'analyze' },
 		get configPhase() { return this.phase === 'config' },
 		get asyncPhase() { return this.phase === 'async' },
-
+		
 		asyncEnabled: true, // async is enabled by default
 		constants: {},
 		declaredModules: {}, // keeps track of all module declarations we've encountered throughout the lifetime of this app
 		definedModules: {},
 		mode: 'production', // by default, Sheath is in productionMode; devMode and analyzeMode must be enabled manually
-		fragmentAccessor: '.', // by default, a period accesses a module fragment
+		portal: '.', // by default, a period accesses a module fragment and a submodule
 		initialModules: [], // these are the modules found during the config phase that will need to be defined in the sync phase
 		dependents: {}, // map dependencies to all dependents found for that module; this turns defining a module into a simple lookup -- O(1)
 		phase: 'config', // Sheath begins in Config Phase; The two other phases will come in once all initial scripts are loaded
 		tasks: []
 	}
-
-
+	
+	
 	/*
-		Module -- A thing with a name, dependencies, and a definition function (all optional).
+		Module -- A thing with an optional name and dependencies and a required definition function.
 	*/
 	var Module = function(name, deps, defFunc) {
 		this.name = name
@@ -238,7 +250,15 @@
 		this.depsLeft = deps.length
 		this.resolvedDeps = []
 		this.readyDeps = []
-		this.exports = {}
+		this.interface = Object.create(null, {
+			name: {
+				get: function() { return name }
+			},
+			exports: {
+				writable: true,
+				value: {}
+			}
+		})
 
 		this.mapDeps()
 	}
@@ -249,36 +269,41 @@
 		},
 
 		define: function() {
-			if (this.depsLeft > 0) return // there are more dependencies to resolve
-
+			if (this.depsLeft > 0 || this.defined) return // there are more dependencies to resolve or we've already defined this module
+			this.defined = true
+			
 			Sheath.taskStart(this)
-			this.visage = !Sheath.analyzeMode && this.defFunc.apply(null, this.resolvedDeps) || {}
+			var definition = !Sheath.analyzeMode && this.defFunc.apply(this.interface, this.resolvedDeps)
 			Sheath.taskEnd()
-
+			
+			this.visage = typeof definition !== 'undefined' ? definition : this.interface.exports
 			if (this.name) Sheath.addDefinedModule(this) // doesn't apply to nameless modules (modules added via sheath.run())
-		},
-
-		export: function(key, val) {
-			if (typeof val === 'undefined') return this.exports[key]
-			this.exports[key] = val
 		},
 
 		// replace the array of deps with a map of depName -> depInfo
 		mapDeps: function() {
-			var mappedDeps = {}
+			var mappedDeps = {},
+				rawDeps = []
+				portal = Sheath.portal
+			
 			for (var i = 0; i < this.deps.length; i++) {
 				var depName = this.deps[i],
-					pieces = depName.split(Sheath.fragmentAccessor).filter(function(node) { return node }),
-					isImport = Sheath.fragmentAccessor && pieces.length > 1
-
+					pieces = depName.split(portal).filter(function(node) { return node }),
+					isImport = portal && pieces.length > 1,
+					isRelative = portal && depName.slice(0, portal.length) === portal
+				
 				var mappedDep = {
 					index: i,
 					name: isImport ? pieces.shift() : depName,
 					import: isImport ? pieces : false
 				}
+				if (isRelative) mappedDep.name = this.name + (isImport ? mappedDep.name : mappedDep.name.slice(portal.length))
+				
+				rawDeps.push(mappedDep.name)
 				Sheath.addDependent(this, mappedDep.name)
 				mappedDeps[mappedDep.name] = mappedDep
 			}
+			this.rawDeps = rawDeps
 			this.deps = mappedDeps
 			this.resolveReadyDeps()
 		},
@@ -299,7 +324,7 @@
 
 		resolveExport: function(exportPath, namespace) {
 			var nextNode = exportPath.shift(), // shift() -- we should only need it once, so mutate away
-				val = namespace ? namespace[nextNode] : this.exports[nextNode] || this.visage[nextNode]
+				val = namespace ? namespace[nextNode] : this.visage && this.visage[nextNode]
 
 			// Don't attempt to go any deeper if the val at this level is undefined or null.
 			if (typeof val === 'undefined' || val === null) return val
@@ -337,6 +362,8 @@
 				Whatever is 'return'ed by this function will be injected into this module's dependents.
 	*/
 	var sheath = function(name, deps, defFunc) {
+		if (typeof name === 'function') return name() // provide a sheath(() => {}) overload that just calls the function
+		
 		// arg swapping -- deps is optional; if 'defFunc' doesn't exist, move it down
 		if (!defFunc) {
 			defFunc = deps
@@ -460,10 +487,10 @@
 	*/
 	sheath.current = function() {
 		if (!Sheath.tasks.length) {
-			console.warn('Sheath.js Warning: No module is currently being defined. Call to sheath.current() will return an empty string.')
-			return ''
+			console.warn('Sheath.js Warning: No module is currently being defined. Call to sheath.current() will return null.')
+			return null
 		}
-		return Sheath.tasks[Sheath.tasks.length - 1].name
+		return Sheath.tasks[Sheath.tasks.length - 1].interface
 	}
 
 
@@ -492,40 +519,48 @@
 		inBrowser = Boolean(val)
 		return sheath // for chaining
 	}
-
-
+	
+	
 	/*
-		sheath.export() -- Create a fragment on the module currently being defined.
-		Can be injected into other modules using the fragmentAccessor
-		A getter/setter
+		sheath.forest() -- Find all modules in the dependency graph of a given module (a 'tree').
+		If no moduleName is passed, find all trees of all app-level modules -- modules that have no dependents.
 	*/
-	sheath.export = function(key, val) {
-		if (!Sheath.tasks.length) {
-			console.warn('Sheath.js Warning: No module is currently being defined. Export ignored.')
-			return sheath
+	sheath.forest = function(moduleName) {
+		if (moduleName) {
+			if (typeof moduleName !== 'string') {
+				throw new TypeError('Sheath.js Error: sheath.forest() expects moduleName to be a string, if specified. Received "' + typeof moduleName + '"')
+			}
+			if (!Sheath.declaredModules[moduleName]) return []
+			return Sheath.tree(moduleName, [])
 		}
-
-		var result = Sheath.tasks[Sheath.tasks.length - 1].export(key, val)
-		return result || sheath // for chaining
+		
+		var forest = {}
+		Object.keys(Sheath.dependents).forEach(function(moduleName) {
+			var dependents = Sheath.dependents[moduleName]
+			if (dependents.length) return // we only care about modules that have not been required by any other modules
+			
+			forest[moduleName] = Sheath.tree(moduleName, [])
+		})
+		return forest
 	}
-
-
+	
+	
 	/*
-		sheath.fragmentAccessor() -- A getter/setter for Sheath.fragmentAccessor -- the char sequence used to access a module fragment.
+		sheath.portal() -- A getter/setter for Sheath.portal -- the char sequence used to access a module fragment.
 		A config method.
 	*/
-	sheath.fragmentAccessor = function(val) {
-		if (typeof val === 'undefined') return Sheath.fragmentAccessor
+	sheath.portal = function(val) {
+		if (typeof val === 'undefined') return Sheath.portal
 		if (!Sheath.configPhase) {
-			throw new Error('Sheath.js Error: fragmentAccessor can only be set in the config phase.')
+			throw new Error('Sheath.js Error: portal can only be set in the config phase.')
 		}
-		if (typeof val !== 'string') throw new TypeError('Sheath.js Error: fragmentAccessor must be a string')
-
-		Sheath.fragmentAccessor = val
+		if (typeof val !== 'string') throw new TypeError('Sheath.js Error: portal must be a string')
+		
+		Sheath.portal = val
 		return sheath // for chaining
 	}
-
-
+	
+	
 	/*
 		sheath.missing() -- Returns the names of all the modules the app is waiting on.
 		These are modules that have been listed as dependencies of other modules, but that haven't been declared yet.
@@ -611,7 +646,7 @@
 			object : object -- optional -- (Required if parent is specified) The new object you want created.
 	*/
 	sheath.object = function(parent, object) {
-		if (Sheath.configPhase) throw new Error('Sheath.js Error: sheath.model() cannot be called during the config phase.')
+		if (Sheath.configPhase) throw new Error('Sheath.js Error: sheath.model() cannot be called during the config phase. Use sheath.run() to defer execution.')
 
 		// Arg swapping -- 'parent' is optional; if 'object' doesn't exist, move it down.
 		if (!object) {
