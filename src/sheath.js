@@ -108,12 +108,23 @@
 
 		implementLoadAsync: function(name, filename) {
 			if (!filename) return // no file found for this module
+			
+			var asyncImplementation = (inBrowser ? this.loadAsyncBrowser : this.loadAsyncServer).bind(this, name,  filename)
 			if (inBrowser && document.scripts && [].filter.call(document.scripts, function(script) { return script.getAttribute('src') === filename }).length) {
-				if (this.devMode) console.warn('Sheath.js Warning: file "' + filename + '" already loaded, but no declaration found for module "' + name + '"')
-				return // this script has already been loaded
+				// Defer condemning this dep until the current execution thread ends (in case its declaration occurs between now and then).
+				setTimeout(function() {
+					if (this.declaredModules[name]) return
+					
+					// This script has already been loaded.
+					if (this.devMode) {
+						console.warn('Sheath.js Warning: file "' + filename + '" already loaded, but no declaration found for module "' + name + '"')
+					}
+					asyncImplementation()
+				}.bind(this), 100)
+				return
 			}
-
-			return inBrowser ? this.loadAsyncBrowser(name, filename) : this.loadAsyncServer(name, filename)
+			
+			asyncImplementation()
 		},
 
 		/*
