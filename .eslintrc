@@ -35,7 +35,7 @@ rules:
   no-obj-calls: 2
   no-regex-spaces: 2
   no-sparse-arrays: 2
-  no-unexpected-multiline: 2
+  no-unexpected-multiline: 0
   no-unreachable: 2
   use-isnan: 2
   valid-jsdoc: 0
@@ -148,7 +148,7 @@ rules:
   max-len: 0
   max-nested-callbacks: 0
   max-params: 0
-  max-statements: [2, 30]
+  max-statements: [2, 50]
   new-cap: 0
   new-parens: 0
   newline-after-var: 0

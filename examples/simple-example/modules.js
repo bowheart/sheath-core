@@ -1,4 +1,11 @@
-sheath('app', ['one', 'two', 'three'], function(one, two, three) {
+// Setup
+sheath.mode('dev').lib
+	('$', 'jQuery', 'https://ajax.googleapis.com/ajax/libs/jquery/3.1.0/jquery.min.js')
+	('_', 'https://cdnjs.cloudflare.com/ajax/libs/lodash.js/4.17.4/lodash.min.js')
+	('moment', 'https://cdnjs.cloudflare.com/ajax/libs/moment.js/2.17.1/moment.min.js')
+
+// Modules
+sheath('app', ['one', 'two', 'three', 'async-module'], function(one, two, three, asyncModule) {
 	$('body').append([one, two, three].join('<br>'))
 })
 
@@ -34,5 +41,3 @@ sheath('two', function() {
 sheath('three', function() {
 	return 'three'
 })
-
-sheath.mode('dev')

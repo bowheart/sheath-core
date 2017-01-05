@@ -103,7 +103,7 @@ describe('sheath()', () => {
 		})
 	})
 	
-	it('can access submodules of the current module using the Portal', () => {
+	it('can access submodules of the current module using the Accessor', () => {
 		return new Promise(resolve => {
 			sheath('module8', ['./one', './two'], (one, two) => {
 				resolve(one + two)

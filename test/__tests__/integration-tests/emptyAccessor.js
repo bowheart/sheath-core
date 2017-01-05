@@ -4,8 +4,8 @@ const sheath = require('../../../src/sheath')
 
 
 
-describe('disabled portal', () => {
-	sheath.portal('')
+describe('disabled accessor', () => {
+	sheath.accessor('')
 	
 	it('does not look for fragments', () => {
 		return new Promise(resolve => {

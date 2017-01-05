@@ -9,7 +9,7 @@ describe('devMode enables more advanced debugging tools', () => {
 
 	it('logs a warning when lazy-loading is disabled, sync phase has ended, and undeclared modules are found', () => {
 		return new Promise(resolve => {
-			console.warn = (warning) => {
+			console.warn = warning => {
 				resolve(warning)
 			}
 			sheath('module1', 'nonexistent-module', () => {})
@@ -21,7 +21,7 @@ describe('devMode enables more advanced debugging tools', () => {
 	it('logs a warning when a simple circular dependency is detected', () => {
 		return new Promise(resolve => {
 			setTimeout(() => {
-				console.warn = (warning) => {
+				console.warn = warning => {
 					resolve(warning)
 				}
 				sheath('module2', 'module3', () => {})
