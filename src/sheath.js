@@ -51,8 +51,8 @@
 			setTimeout(this.loadAsync.bind(this, depName))
 		},
 		
-		asyncLoaderFactory: function(moduleName, fileName, onload) {
-			var loader = new (inBrowser ? ClientLoader : ServerLoader)(moduleName, fileName, onload)
+		asyncLoaderFactory: function(moduleName, fileName, onload, sync) {
+			var loader = new (inBrowser ? ClientLoader : ServerLoader)(moduleName, fileName, onload, sync)
 			loader.load()
 		},
 
@@ -278,7 +278,7 @@
 		// replace the array of deps with a map of depName -> depInfo
 		mapDeps: function() {
 			var mappedDeps = {},
-				rawDeps = []
+				rawDeps = [],
 				accessor = Sheath.accessor
 			
 			for (var i = 0; i < this.deps.length; i++) {
@@ -357,7 +357,7 @@
 		},
 		
 		load: function() {
-			Sheath.asyncLoaderFactory(this.name, this.fileName, this.onload.bind(this))
+			Sheath.asyncLoaderFactory(this.name, this.fileName, this.onload.bind(this), true)
 		},
 		
 		onload: function() {
@@ -370,10 +370,11 @@
 	}))
 	
 	
-	var AsyncLoader = function(moduleName, fileName, onload) {
+	var AsyncLoader = function(moduleName, fileName, onload, sync) {
 		this.moduleName = moduleName
 		this.fileName = fileName
 		this.onload = onload
+		this.sync = sync
 	}
 	/*
 		ClientLoader -- Implement asynchronous file loading for a browser environment.
@@ -409,6 +410,7 @@
 					console.warn('Sheath.js Warning: Module file successfully loaded, but module "' + this.moduleName + '" not found. Potential hang situation.')
 				}.bind(this)
 			}
+			script.async = !this.sync
 			script.src = this.fileName
 			document.body.appendChild(script)
 		},
