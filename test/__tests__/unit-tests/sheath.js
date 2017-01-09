@@ -103,9 +103,9 @@ describe('sheath()', () => {
 		})
 	})
 	
-	it('can access submodules of the current module using the Accessor', () => {
+	it('can require submodules of the current module by prefixing the dep name with the Separator', () => {
 		return new Promise(resolve => {
-			sheath('module8', ['./one', './two'], (one, two) => {
+			sheath('module8', ['/one', '/two'], (one, two) => {
 				resolve(one + two)
 			})
 			sheath('module8/one', () => 'one')
@@ -115,7 +115,30 @@ describe('sheath()', () => {
 		})
 	})
 	
+	it('can require siblings of the current module by prefixing the dep name with "." + the Separator', () => {
+		return new Promise(resolve => {
+			sheath('module9/a', ['./b', './c'], (b, c) => {
+				resolve(b + c)
+			})
+			sheath('module9/b', () => 'b')
+			sheath('module9/c', () => 'c')
+		}).then(result => {
+			expect(result).toBe('bc')
+		})
+	})
+	
+	it('can require uncles, great-uncles, etc of the current module by prefixing the dep name with ".." + the Separator (chained indefinitely)', () => {
+		return new Promise(resolve => {
+			sheath('module10/one/a', ['../two', '../../module9/b'], (two, b) => {
+				resolve(two + b)
+			})
+			sheath('module10/two', () => '10/two')
+		}).then(result => {
+			expect(result).toBe('10/twob')
+		})
+	})
+	
 	it('has a cool name (the toString() method is overridden)', () => {
-		expect(sheath.toString()).toBe('I Am Sheath')
+		expect(sheath + '').toBe('I Am Sheath')
 	})
 })

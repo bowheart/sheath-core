@@ -274,27 +274,24 @@
 			
 			this.saveDefinition(definition)
 		},
+		
+		// Determine if the dep is relative ("../", "./", "/") or an import ("module.import").
+		mapDep: function(name) {
+			name = this.parseRelativeDep(name)
+			return this.parseImport(name)
+		},
 
-		// replace the array of deps with a map of depName -> depInfo
+		// Replace the array of deps with a map of depName -> depInfo.
 		mapDeps: function() {
 			var mappedDeps = {},
-				rawDeps = [],
-				accessor = Sheath.accessor
+				rawDeps = []
 			
 			for (var i = 0; i < this.deps.length; i++) {
 				var depName = this.deps[i]
 				if (!depName) continue
 				
-				var pieces = depName.split(accessor).filter(function(node) { return node }),
-					isImport = accessor && pieces.length > 1,
-					isRelative = accessor && depName.slice(0, accessor.length) === accessor
-				
-				var mappedDep = {
-					index: i,
-					name: isImport ? pieces.shift() : depName,
-					import: isImport ? pieces : false
-				}
-				if (isRelative) mappedDep.name = this.name + (isImport ? mappedDep.name : mappedDep.name.slice(accessor.length))
+				var mappedDep = this.mapDep(depName)
+				mappedDep.index = i
 				
 				rawDeps.push(mappedDep.name)
 				Sheath.addDependent(this, mappedDep.name)
@@ -304,10 +301,52 @@
 			this.deps = mappedDeps
 			this.resolveReadyDeps()
 		},
-
+		
+		parseImport: function(name) {
+			var sep = Sheath.separator,
+				acc = Sheath.accessor
+			
+			if (!acc) return {name: name} // fragments are disabled if the Accessor is set to ''
+			
+			var modulePath = name.split(sep),
+				importPath = modulePath.pop().split(acc)
+			
+			return {
+				name: modulePath.join(sep) + (modulePath.length ? sep : '') + importPath.shift(),
+				import: importPath.length ? importPath : false
+			}
+		},
+		
+		parseRelativeDep: function(name) {
+			var sep = Sheath.separator
+			if (!sep) return name // relative paths are disabled if the Separator is set to ''
+			
+			// sheath('module', '/submodule') -> resolves to 'module/submodule'
+			if (name.slice(0, sep.length) === sep) {
+				return this.name + name
+			}
+			
+			if (name[0] !== '.') return name // not a relative path
+			var path = this.name.split(sep)
+			
+			// sheath('one/a', './b') -> resolves to 'one/b'
+			if (name.slice(0, 1 + sep.length) === '.' + sep) {
+				return path.slice(0, -1).join(sep) + name.slice(1)
+			}
+			
+			// sheath('one/a/1', '../b/1') -> resolves to 'one/b/1'
+			// sheath('one/a/1', '../../two') -> resolves to 'two'
+			path.pop()
+			while (name.slice(0, 2 + sep.length) === '..' + sep) {
+				path.pop()
+				name = name.slice(2 + sep.length)
+			}
+			return path.join(sep) + (path.length ? sep : '') + name
+		},
+		
 		resolveDep: function(resolvedDep) {
 			var depInfo = this.deps[resolvedDep.name]
-
+			
 			// If the dep is a fragment grab that, otherwise grab the resolvedDep's visage.
 			var resolvedVal = depInfo.import
 				? resolvedDep.resolveExport(depInfo.import)

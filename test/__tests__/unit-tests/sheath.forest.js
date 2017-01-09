@@ -36,8 +36,8 @@ describe('sheath.forest()', () => {
 	it('finds nested dependencies', () => {
 		return new Promise(resolve => {
 			sheath('app3', 'dependency4', resolve)
-			sheath('dependency4', './a', () => {})
-			sheath('dependency4/a', 'dependency4/b', () => {})
+			sheath('dependency4', '/a', () => {})
+			sheath('dependency4/a', './b', () => {})
 			sheath('dependency4/b', () => {})
 		}).then(result => {
 			let forest = sheath.forest()
