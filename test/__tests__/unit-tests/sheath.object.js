@@ -77,10 +77,10 @@ describe('sheath.object()', () => {
 			sheath.run(resolve)
 		}).then(result => {
 			let parent = sheath.object({
-				func() {return 1},
+				func() {return 1}
 			})
 			let child = sheath.object(parent, {
-				func() {return 2},
+				func() {return 2}
 			})
 			expect(child.func()).toBe(2)
 		})

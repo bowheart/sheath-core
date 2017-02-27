@@ -451,7 +451,7 @@
 			}
 			script.async = !this.sync
 			script.src = this.fileName
-			document.body.appendChild(script)
+			document.head.appendChild(script)
 		},
 		
 		scriptExists: function() {
@@ -708,6 +708,20 @@
 	
 	
 	/*
+		sheath.instance() -- Create a model and immediately return an instance of it.
+		Used for creating static classes.
+		Really only differs from sheath.object() in that the init() function is taken into account.
+		This means mutatable properties (arrays, functions, objects) can be set in the init function, avoiding copying pointers across multiple instances of the object.
+	*/
+	sheath.instance = function(parent, model) {
+		sheath.instance.active = true
+		var Model = sheath.model(parent, model)
+		sheath.instance.active = false
+		return new Model()
+	}
+	
+	
+	/*
 		sheath.lib() -- An easy way to encapsulate/incorporate third-party libraries.
 	*/
 	sheath.lib = function lib(moduleName, globalName, fileName) {
@@ -770,8 +784,10 @@
 			model : object -- required -- The class definition. If the object has an 'init()' property (optional), it will become the class constructor.
 	*/
 	sheath.model = function(parent, model) {
+		// sheath.instance() uses sheath.model() internally. Find which one the user called for better error reporting.
+		var funcName = sheath.instance.active ? 'sheath.instance()' : 'sheath.model()'
 		if (Sheath.configPhase) {
-			throw new Error('Sheath.js Error: sheath.model() cannot be called during the config phase. Use sheath.run() to defer execution.')
+			throw new Error('Sheath.js Error: ' + funcName + ' cannot be called during the config phase. Use sheath.run() to defer execution.')
 		}
 
 		// Arg swapping -- 'parent' is optional; if 'model' doesn't exist, move it down.
@@ -781,27 +797,25 @@
 		}
 
 		// Make sure the model param is valid.
-		if (typeof model !== 'object') throw new TypeError('Sheath.js Error: sheath.model() expects an object. Received "' + typeof model + '".')
+		if (typeof model !== 'object') throw new TypeError('Sheath.js Error: ' + funcName + ' expects the model to be an object. Received "' + typeof model + '".')
 
 		// Make sure the parent param is valid, if it was given.
 		if (parent && typeof parent !== 'function') {
-			throw new TypeError('Sheath.js Error: sheath.model() expects the parent to be a constructor function. Received "' + typeof parent + '".')
+			throw new TypeError('Sheath.js Error: ' + funcName + ' expects the parent to be a constructor function. Received "' + typeof parent + '".')
 		}
 
 		// Make sure the init property is valid, if it was given.
-		if (model.init && typeof model.init !== 'function') throw new TypeError('Sheath.js Error: "init" property of model must be a function')
-
-		// Use the init() property of the model as the constructor (if it exists), otherwise use the parent's (if there's a parent)
-		var constructor = model.init || function Model() {
-			if (parent) return parent.apply(this, arguments)
+		if (model.init && typeof model.init !== 'function') {
+			throw new TypeError('Sheath.js Error: ' + funcName + ' expects model "init" property to be a function. Received "' + typeof model.init + '".')
 		}
 
-		var parentPrototype = parent ? parent.prototype : null
-
-		// Set up the `this.super` property
-		model.super = parentPrototype
+		// Set up the constructor. This will auto-call the `init` method, if one exists anywhere on the prototype chain.
+		var constructor = function Model() {
+			if (this.init) return this.init.apply(this, arguments)
+		}
 
 		// Implement the inheritance (if user gave a parent model) and make the rest of the model the prototype
+		var parentPrototype = parent ? parent.prototype : null
 		constructor.prototype = Object.create(parentPrototype, Sheath.toPropertyDescriptors(model))
 
 		return constructor

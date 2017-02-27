@@ -7,14 +7,14 @@ const proto = Object.getPrototypeOf
 
 describe('sheath.model()', () => {
 	it('cannot be called during the config phase', () => {
-		expect(sheath.model.bind(null, {})).toThrowError(/config phase/i)
+		expect(sheath.model.bind(null, {})).toThrowError(/sheath\.model.*config phase/i)
 	})
 
 	it('asserts that the model is an object', () => {
 		return new Promise(resolve => {
 			sheath.run(resolve)
 		}).then(result => {
-			expect(sheath.model.bind(null, '')).toThrowError(/expects.*an object/i)
+			expect(sheath.model.bind(null, '')).toThrowError(/sheath\.model.*expects.*an object/i)
 		})
 	})
 
@@ -32,11 +32,11 @@ describe('sheath.model()', () => {
 		return new Promise(resolve => {
 			sheath.run(resolve)
 		}).then(result => {
-			expect(sheath.model.bind(null, {init: 'init'})).toThrowError(/must be a function/i)
+			expect(sheath.model.bind(null, {init: 'init'})).toThrowError(/sheath\.model.*expects.*init.*a function/i)
 		})
 	})
 
-	it('makes the "init" property the constructor, if specified', () => {
+	it('auto-calls the "init" method on instantiation, if one is specified', () => {
 		return new Promise(resolve => {
 			sheath.run(resolve)
 		}).then(result => {
@@ -56,20 +56,11 @@ describe('sheath.model()', () => {
 		})
 	})
 
-	it('sets the super property to null when there is no parent', () => {
-		return new Promise(resolve => {
-			sheath.run(resolve)
-		}).then(result => {
-			let Model = sheath.model({})
-			expect(new Model().super).toBe(null)
-		})
-	})
-
 	it('asserts that the parent is a function, if specified', () => {
 		return new Promise(resolve => {
 			sheath.run(resolve)
 		}).then(result => {
-			expect(sheath.model.bind(null, 'the-parent', {})).toThrowError(/expects.* a .*function/i)
+			expect(sheath.model.bind(null, 'the-parent', {})).toThrowError(/sheath\.model.*expects.* a .*function/i)
 		})
 	})
 
@@ -87,17 +78,6 @@ describe('sheath.model()', () => {
 		})
 	})
 
-	it('sets the super property to the parent', () => {
-		return new Promise(resolve => {
-			sheath.run(resolve)
-		}).then(result => {
-			let Parent = sheath.model({})
-			let Child = sheath.model(Parent, {})
-			let child = new Child()
-			expect(child.super).toBe(Parent.prototype)
-		})
-	})
-
 	it('allows the child to override a property on the parent', () => {
 		return new Promise(resolve => {
 			sheath.run(resolve)
@@ -108,7 +88,7 @@ describe('sheath.model()', () => {
 			})
 			let Child = sheath.model(Parent, {
 				func() {return 2},
-				func2() {return this.super.func2() + 4}
+				func2() {return Parent.prototype.func2() + 4}
 			})
 			let child = new Child()
 			expect(child.func()).toBe(2)
@@ -126,11 +106,11 @@ describe('sheath.model()', () => {
 			let Four = sheath.model(Three, {})
 			let Five = sheath.model(Four, {})
 			let five = new Five()
-			expect(five.super).toBe(Four.prototype)
-			expect(five.super.super).toBe(Three.prototype)
-			expect(five.super.super.super).toBe(Two.prototype)
-			expect(five.super.super.super.super).toBe(One.prototype)
-			expect(five.super.super.super.super.super).toBe(null)
+			expect(proto(proto(five))).toBe(Four.prototype)
+			expect(proto(proto(proto(five)))).toBe(Three.prototype)
+			expect(proto(proto(proto(proto(five))))).toBe(Two.prototype)
+			expect(proto(proto(proto(proto(proto(five)))))).toBe(One.prototype)
+			expect(proto(proto(proto(proto(proto(proto(five))))))).toBe(null)
 		})
 	})
 
