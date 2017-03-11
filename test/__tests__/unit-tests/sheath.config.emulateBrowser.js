@@ -4,21 +4,21 @@ const sheath = require('../../../src/sheath')
 
 
 
-describe('sheath.emulateBrowser()', () => {
+describe('sheath.config.emulateBrowser()', () => {
 	it('is turned off on the server by default', () => {
-		expect(sheath.emulateBrowser()).toBe(false)
+		expect(sheath.config.emulateBrowser()).toBe(false)
 	})
 	
 	it('can be modified during the config phase', () => {
-		sheath.emulateBrowser(true)
-		expect(sheath.emulateBrowser()).toBe(true)
+		sheath.config.emulateBrowser(true)
+		expect(sheath.config.emulateBrowser()).toBe(true)
 	})
 	
 	it('cannot be modified after the config phase', () => {
 		return new Promise(resolve => {
 			setTimeout(resolve)
 		}).then(result => {
-			expect(sheath.emulateBrowser.bind(null, false)).toThrowError(/config phase/i)
+			expect(sheath.config.emulateBrowser.bind(null, false)).toThrowError(/config phase/i)
 		})
 	})
 })

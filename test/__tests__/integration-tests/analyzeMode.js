@@ -5,7 +5,7 @@ const sheath = require('../../../src/sheath')
 
 
 describe('analyzeMode enables advanced analysis tools', () => {
-	sheath.mode('analyze')
+	sheath.config.mode('analyze')
 
 	it('never calls the definition function', () => {
 		return new Promise(resolve => {

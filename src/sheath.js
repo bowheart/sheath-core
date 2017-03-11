@@ -78,7 +78,7 @@
 		declareInitialModules: function() {
 			for (var i = 0; i < this.initialModules.length; i++) {
 				var module = this.initialModules[i]
-				this.moduleFactory(module.name, module.deps, module.defFunc)
+				this.moduleFactory(module.name, module.deps, module.factory)
 			}
 		},
 
@@ -143,8 +143,8 @@
 			}
 		},
 		
-		moduleFactory(name, deps, defFunc) {
-			var newModule = new Module(name, deps, defFunc)
+		moduleFactory(name, deps, factory) {
+			var newModule = new Module(name, deps, factory)
 			newModule.declare()
 			newModule.define() // attempt to define this module synchronously, in case there are no deps
 		},
@@ -236,10 +236,10 @@
 	/*
 		Module -- A thing with an optional name and dependencies and a required definition function.
 	*/
-	var Module = function(name, deps, defFunc) {
+	var Module = function(name, deps, factory) {
 		this.name = name
 		this.deps = deps
-		this.defFunc = defFunc
+		this.factory = factory
 		this.depsLeft = deps.length
 		this.resolvedDeps = []
 		this.readyDeps = []
@@ -269,7 +269,7 @@
 		
 		implementDefine: function() {
 			Sheath.taskStart(this)
-			var definition = this.defFunc.apply(this.interface, this.resolvedDeps)
+			var definition = this.factory.apply(this.interface, this.resolvedDeps)
 			Sheath.taskEnd()
 			
 			this.saveDefinition(definition)
@@ -501,43 +501,64 @@
 			deps : string | array -- optional -- The module or list of modules required by this module.
 				Each of these must be the name of another module defined somewhere.
 				If any dep in this list is not declared in the app and cannot be found by the async loader, the app will hang.
-				These will be 'injected' into the defFunc.
-			defFunc : function -- required -- The function that will be called to define this module.
+				These will be 'injected' into the factory.
+			factory : function -- required -- The function that will be called to define this module.
 				The parameters of this function will be this module's dependencies, in the order they were listed.
 				Whatever is 'return'ed by this function will be injected into this module's dependents.
 	*/
-	var sheath = function(name, deps, defFunc) {
+	var sheath = function(name, deps, factory) {
 		if (typeof name === 'function') return name() // provide a sheath(() => {}) overload that just calls the function
 		
-		// Arg swapping -- deps is optional; if 'defFunc' doesn't exist, move it down.
-		if (!defFunc) {
-			defFunc = deps
+		// Arg swapping -- deps is optional; if 'factory' doesn't exist, move it down.
+		if (!factory) {
+			factory = deps
 			deps = []
 		}
 		if (typeof name !== 'string') {
 			throw new TypeError('Sheath.js Error: sheath() expects the name to be a string. Received "' + typeof name + '".')
 		}
-		if (typeof defFunc !== 'function') {
-			throw new TypeError('Sheath.js Error: sheath() expects the module definition to be a function. Received "' + typeof defFunc + '".')
+		if (typeof factory !== 'function') {
+			throw new TypeError('Sheath.js Error: sheath() expects the module definition to be a function. Received "' + typeof factory + '".')
 		}
 		if (typeof deps === 'string') deps = [deps] // if 'deps' is a string, make it the only dependency
 		if (!Array.isArray(deps)) {
 			throw new TypeError('Sheath.js Error: sheath() expects the deps to be a string or array of strings. Received "' + typeof deps + '".')
 		}
 		if (Sheath.configPhase) {
-			Sheath.initialModules.push({name: name, deps: deps, defFunc: defFunc})
+			Sheath.initialModules.push({name: name, deps: deps, factory: factory})
 			return
 		}
-		Sheath.moduleFactory(name, deps, defFunc)
+		Sheath.moduleFactory(name, deps, factory)
 		return sheath // for chaining
 	}
 	
 	
 	/*
-		sheath.accessor() -- A getter/setter for Sheath.accessor -- the char sequence used to access a module fragment.
-		A config method.
+		sheath.config() -- A getter/setter extraordinaire for all config settings.
+		Also controls a namespace of getters/setters for each config setting.
+		All config methods return sheath.config for chaining.
 	*/
-	sheath.accessor = function(accessor) {
+	sheath.config = function(key, val) {
+		if (typeof key === 'string') {
+			if (!sheath.config[key]) throw new ReferenceError('Sheath.js Error: Invalid config setting "' + key + '" passed to sheath.config()')
+			return sheath.config[key](val)
+		}
+		if (Array.isArray(key) || typeof key !== 'object') {
+			throw new TypeError('Sheath.js Error: sheath.config() expects a key, key-value pair, or an object. Received "' + typeof key + '".')
+		}
+		
+		Object.keys(key).forEach(function(prop) {
+			if (!sheath.config[prop]) throw new ReferenceError('Sheath.js Error: Invalid config setting "' + prop + '" passed to sheath.config()')
+			sheath.config[prop](key[prop])
+		})
+		return sheath.config
+	}
+	
+	
+	/*
+		sheath.config.accessor() -- A getter/setter for Sheath.accessor -- the char sequence used to access a module fragment.
+	*/
+	sheath.config.accessor = function(accessor) {
 		if (typeof accessor === 'undefined') return Sheath.accessor
 		if (!Sheath.configPhase) {
 			throw new Error('Sheath.js Error: accessor can only be set in the config phase.')
@@ -546,45 +567,41 @@
 		if (accessor === Sheath.separator) throw new Error('Sheath.js Error: Accessor and separator cannot be the same.')
 		
 		Sheath.accessor = accessor
-		return sheath // for chaining
+		return sheath.config // for chaining
 	}
 
 
 	/*
-		sheath.async() -- A getter/setter to see/define the status of the async loader.
-		A config method.
+		sheath.config.async() -- A getter/setter to see/define the status of the async loader.
 		Pass true to activate async loading, false to deactivate.
 		Async loading is turned on by default.
 	*/
-	sheath.async = function(val) {
+	sheath.config.async = function(val) {
 		if (typeof val === 'undefined') return Sheath.asyncEnabled
 		if (!Sheath.configPhase) throw new Error('Sheath.js Error: lazy-loading can only enabled/disabled in the Config Phase.')
 
 		Sheath.asyncEnabled = Boolean(val)
-		return sheath // for chaining
+		return sheath.config // for chaining
 	}
 
 
 	/*
-		sheath.asyncResolver(function) -- The default async filename resolver doesn't do much. Use this guy to beef it up.
-		A getter/setter.
-		A config method.
+		sheath.config.asyncResolver(function) -- The default async filename resolver doesn't do much. Use this guy to beef it up.
 	*/
-	sheath.asyncResolver = function(newResolver) {
+	sheath.config.asyncResolver = function(newResolver) {
 		if (!newResolver) return Sheath.asyncResolver
 		if (!Sheath.configPhase) throw new Error('Sheath.js Error: asyncResolver can only be set in the config phase.')
 		if (typeof newResolver !== 'function') throw new TypeError('Sheath.js Error: Custom asyncResolver must be a function')
 
 		Sheath.asyncResolver = newResolver
-		return sheath // for chaining
+		return sheath.config // for chaining
 	}
 
 
 	/*
-		sheath.baseModel() -- A getter/setter for the baseModel to be used by sheath.model() as the default parent prototype.
-		A config method.
+		sheath.config.baseModel() -- A getter/setter for the baseModel to be used by sheath.model() as the default parent prototype.
 	*/
-	sheath.baseModel = function(baseModel) {
+	sheath.config.baseModel = function(baseModel) {
 		if (typeof baseModel === 'undefined') return Sheath.baseModel
 
 		if (!Sheath.configPhase) {
@@ -602,15 +619,14 @@
 		constructor.prototype = Object.create(baseModel, Sheath.toPropertyDescriptors(baseModel))
 
 		Sheath.baseModel = constructor
-		return sheath // for chaining
+		return sheath.config // for chaining
 	}
 
 
 	/*
-		sheath.baseObject() -- A getter/setter for the baseObject to be used by sheath.object() as the default parent prototype.
-		A config method.
+		sheath.config.baseObject() -- A getter/setter for the baseObject to be used by sheath.object() as the default parent prototype.
 	*/
-	sheath.baseObject = function(baseObject) {
+	sheath.config.baseObject = function(baseObject) {
 		if (typeof baseObject === 'undefined') return Sheath.baseObject
 
 		if (!Sheath.configPhase) {
@@ -621,7 +637,57 @@
 		}
 
 		Sheath.baseObject = baseObject
-		return sheath // for chaining
+		return sheath.config // for chaining
+	}
+
+
+	/*
+		sheath.config.emulateBrowser() -- A getter/setter for whether Sheath is currently running in browser-mode.
+		This is used to find the global object and to implement asynchronous loading.
+		This should really only be used for testing purposes.
+	*/
+	sheath.config.emulateBrowser = function(val) {
+		if (typeof val === 'undefined') return inBrowser
+		if (!Sheath.configPhase) {
+			throw new Error('Sheath.js Error: Browser emulation can only be modified during the config phase.')
+		}
+		inBrowser = Boolean(val)
+		return sheath.config // for chaining
+	}
+
+
+	/*
+		sheath.config.mode() -- A getter/setter to get the status of and enable/disable advanced debugging/analysis tools.
+	*/
+	sheath.config.mode = function(val) {
+		if (typeof val === 'undefined') return Sheath.mode
+		if (!Sheath.configPhase) {
+			throw new Error('Sheath.js Error: mode can only be set in the config phase.')
+		}
+		switch (val) {
+			case 'dev': case 'analyze': case 'production':
+				Sheath.mode = val
+				break
+			default:
+				throw new ReferenceError('Sheath.js Error: "' + val + '" is not a valid mode. Valid modes are "production", "dev", and "analyze"')
+		}
+		return sheath.config // for chaining
+	}
+	
+	
+	/*
+		sheath.config.separator() -- A getter/setter for Sheath.separator -- the char sequence used to delineate a submodule.
+	*/
+	sheath.config.separator = function(sep) {
+		if (typeof sep === 'undefined') return Sheath.separator
+		if (!Sheath.configPhase) {
+			throw new Error('Sheath.js Error: accessor can only be set in the config phase.')
+		}
+		if (typeof sep !== 'string') throw new TypeError('Sheath.js Error: separator must be a string. Received "' + typeof sep + '".')
+		if (sep === Sheath.accessor) throw new Error('Sheath.js Error: Separator and accessor cannot be the same.')
+		
+		Sheath.separator = sep
+		return sheath.config // for chaining
 	}
 
 
@@ -666,20 +732,6 @@
 			map[moduleName] = Sheath.dependents[moduleName].map(function(dep) { return dep.name }) // map so we're not exposing internal objects
 		})
 		return map
-	}
-
-
-	/*
-		sheath.emulateBrowser() -- A getter/setter for whether Sheath is currently running in browser-mode.
-		A config method.
-	*/
-	sheath.emulateBrowser = function(val) {
-		if (typeof val === 'undefined') return inBrowser
-		if (!Sheath.configPhase) {
-			throw new Error('Sheath.js Error: Browser emulation can only be modified during the config phase.')
-		}
-		inBrowser = Boolean(val)
-		return sheath // for chaining
 	}
 	
 	
@@ -753,26 +805,6 @@
 	*/
 	sheath.missing = function() {
 		return Sheath.undeclaredModules(true)
-	}
-
-
-	/*
-		sheath.mode() -- A getter/setter to get the status of and enable/disable advanced debugging/analysis tools.
-		A config method.
-	*/
-	sheath.mode = function(val) {
-		if (typeof val === 'undefined') return Sheath.mode
-		if (!Sheath.configPhase) {
-			throw new Error('Sheath.js Error: mode can only be set in the config phase.')
-		}
-		switch (val) {
-			case 'dev': case 'analyze': case 'production':
-				Sheath.mode = val
-				break
-			default:
-				throw new ReferenceError('Sheath.js Error: "' + val + '" is not a valid mode. Valid modes are "production", "dev", and "analyze"')
-		}
-		return sheath // for chaining
 	}
 
 
@@ -882,27 +914,10 @@
 			throw new TypeError('Sheath.js Error: sheath.run() expects the deps to be a string or array of strings. Received "' + typeof deps + '".')
 		}
 		if (Sheath.configPhase) {
-			Sheath.initialModules.push({name: '', deps: deps, defFunc: func})
+			Sheath.initialModules.push({name: '', deps: deps, factory: func})
 			return
 		}
 		Sheath.moduleFactory('', deps, func)
-		return sheath // for chaining
-	}
-	
-	
-	/*
-		sheath.separator() -- A getter/setter for Sheath.separator -- the char sequence used to delineate a submodule.
-		A config method.
-	*/
-	sheath.separator = function(sep) {
-		if (typeof sep === 'undefined') return Sheath.separator
-		if (!Sheath.configPhase) {
-			throw new Error('Sheath.js Error: accessor can only be set in the config phase.')
-		}
-		if (typeof sep !== 'string') throw new TypeError('Sheath.js Error: separator must be a string. Received "' + typeof sep + '".')
-		if (sep === Sheath.accessor) throw new Error('Sheath.js Error: Separator and accessor cannot be the same.')
-		
-		Sheath.separator = sep
 		return sheath // for chaining
 	}
 	

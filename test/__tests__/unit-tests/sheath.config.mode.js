@@ -4,35 +4,35 @@ const sheath = require('../../../src/sheath')
 
 
 
-describe('sheath.mode()', () => {
+describe('sheath.config.mode()', () => {
 	it('is set to "production" by default', () => {
-		expect(sheath.mode()).toBe('production')
+		expect(sheath.config.mode()).toBe('production')
 	})
 
 	it('can be set to "dev" during the config phase', () => {
-		sheath.mode('dev')
-		expect(sheath.mode()).toBe('dev')
+		sheath.config.mode('dev')
+		expect(sheath.config.mode()).toBe('dev')
 	})
 
 	it('can be set to "analyze" during the config phase', () => {
-		sheath.mode('analyze')
-		expect(sheath.mode()).toBe('analyze')
+		sheath.config.mode('analyze')
+		expect(sheath.config.mode()).toBe('analyze')
 	})
 
 	it('can be set to "production" during the config phase', () => {
-		sheath.mode('production')
-		expect(sheath.mode()).toBe('production')
+		sheath.config.mode('production')
+		expect(sheath.config.mode()).toBe('production')
 	})
 
 	it('asserts that the passed value is one of ["production", "dev", "analyze"]', () => {
-		expect(sheath.mode.bind(null, 'other')).toThrowError(/not a valid mode/i)
+		expect(sheath.config.mode.bind(null, 'other')).toThrowError(/not a valid mode/i)
 	})
 
 	it('cannot be modified after the config phase', () => {
 		return new Promise(resolve => {
 			setTimeout(resolve)
 		}).then(result => {
-			expect(sheath.mode.bind(null, false)).toThrowError(/config phase/i)
+			expect(sheath.config.mode.bind(null, false)).toThrowError(/config phase/i)
 		})
 	})
 })

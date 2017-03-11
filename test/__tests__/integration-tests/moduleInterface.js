@@ -5,7 +5,7 @@ const sheath = require('../../../src/sheath')
 
 
 describe('moduleInterface objects', () => {
-	it('is the context of definitionFunctions that are bindable', () => {
+	it('is the context of bindable factories', () => {
 		return new Promise(resolve => {
 			sheath('module1', function() { // a bindable function
 				resolve(this)

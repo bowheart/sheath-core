@@ -4,30 +4,30 @@ const sheath = require('../../../src/sheath')
 
 
 
-describe('sheath.baseModel()', () => {
+describe('sheath.config.baseModel()', () => {
 	it('is undefined by default', () => {
-		expect(sheath.baseModel()).toBe(undefined)
+		expect(sheath.config.baseModel()).toBe(undefined)
 	})
 	
 	it('asserts that the baseModel is an object', () => {
-		expect(sheath.baseModel.bind(null, 'the-base-model')).toThrowError(/must be an object or null/i)
+		expect(sheath.config.baseModel.bind(null, 'the-base-model')).toThrowError(/must be an object or null/i)
 	})
 	
 	it('can be modified during the config phase', () => {
 		let baseModel = {a: 1}
-		sheath.baseModel(baseModel)
-		let setModel = sheath.baseModel()
+		sheath.config.baseModel(baseModel)
+		let setModel = sheath.config.baseModel()
 		expect(new setModel().a).toBe(1)
 	})
 	
 	it('can be set to null', () => {
-		sheath.baseModel(null)
-		expect(sheath.baseModel()).toBe(null)
+		sheath.config.baseModel(null)
+		expect(sheath.config.baseModel()).toBe(null)
 	})
 	
 	it('can be chained', () => {
-		sheath.baseModel({b: 2}).baseModel({c: 3})
-		let setModel = sheath.baseModel()
+		sheath.config.baseModel({b: 2}).baseModel({c: 3})
+		let setModel = sheath.config.baseModel()
 		let instance = new setModel()
 		expect(instance.b).toBe(undefined)
 		expect(instance.c).toBe(3)
@@ -37,7 +37,7 @@ describe('sheath.baseModel()', () => {
 		return new Promise(resolve => {
 			setTimeout(resolve)
 		}).then(result => {
-			expect(sheath.baseModel.bind(null, {a: 2})).toThrowError(/config phase/i)
+			expect(sheath.config.baseModel.bind(null, {a: 2})).toThrowError(/config phase/i)
 		})
 	})
 })

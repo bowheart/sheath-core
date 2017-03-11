@@ -4,15 +4,15 @@ const sheath = require('../../../src/sheath')
 
 
 
-describe('sheath.asyncResolver()', () => {
+describe('sheath.config.asyncResolver()', () => {
 	it('by default, just tacks on the .js extension', () => {
-		let resolver = sheath.asyncResolver()
+		let resolver = sheath.config.asyncResolver()
 		expect(resolver('test')).toBe('test.js')
 	})
 	
 	it('can be modified during the config phase', () => {
-		sheath.asyncResolver(module => module.replace('.', '/') + '.js')
-		let resolver = sheath.asyncResolver()
+		sheath.config.asyncResolver(module => module.replace('.', '/') + '.js')
+		let resolver = sheath.config.asyncResolver()
 		expect(resolver('module.submodule')).toBe('module/submodule.js')
 	})
 	
@@ -20,7 +20,7 @@ describe('sheath.asyncResolver()', () => {
 		return new Promise(resolve => {
 			setTimeout(resolve)
 		}).then(result => {
-			expect(sheath.asyncResolver.bind(null, module => 'js/' + module)).toThrowError(/config phase/i)
+			expect(sheath.config.asyncResolver.bind(null, module => 'js/' + module)).toThrowError(/config phase/i)
 		})
 	})
 })

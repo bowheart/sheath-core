@@ -5,7 +5,7 @@ const sheath = require('../../../src/sheath')
 
 
 describe('disabled accessor', () => {
-	sheath.accessor('')
+	sheath.config.accessor('')
 	
 	it('allows a module name to contain anything (except a "." as the first character)', () => {
 		expect(sheath.bind(null, 'module.name', () => {})).not.toThrow()

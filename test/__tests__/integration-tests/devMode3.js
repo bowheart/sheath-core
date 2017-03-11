@@ -5,7 +5,7 @@ const sheath = require('../../../src/sheath')
 
 
 describe('devMode enables even more advanced debugging tools', () => {
-	sheath.mode('dev')
+	sheath.config.mode('dev')
 	
 	it('logs a warning if the global property of a lib does not exist', () => {
 		return new Promise(resolve => {
