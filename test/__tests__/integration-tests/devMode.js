@@ -29,14 +29,14 @@ describe('devMode enables advanced debugging tools', () => {
 			let mockScript = {}
 			document.createElement = () => mockScript
 			
-			sheath('module2', 'nonexistent-module', () => {})
+			sheath('module2', 'nonexistent-module2', () => {})
 			setTimeout(() => {
 				setTimeout(() => { // timeout again to get past the start of the async phase
 					let theWarning = ''
 					console.warn = jest.fn(warning => {theWarning = warning})
 					
-					mockScript.onload() // trigger the onerror event handler that Sheath put on our mock script
-					sheath('nonexistent-module', () => {})
+					mockScript.onload() // trigger the load event handler that Sheath put on our mock script
+					sheath('nonexistent-module2', () => {})
 					mockScript.onload() // shouldn't log another warning
 					resolve(theWarning)
 				})
@@ -51,12 +51,12 @@ describe('devMode enables advanced debugging tools', () => {
 		return new Promise(resolve => {
 			Object.defineProperty(document, 'scripts', {
 				value: [{
-					getAttribute: jest.fn(() => 'nonexistent-module2.js')
+					getAttribute: jest.fn(() => 'nonexistent-module3.js')
 				}]
 			})
 			setTimeout(() => {
 				console.warn = warning => resolve(warning)
-				sheath('module3', 'nonexistent-module2', () => {})
+				sheath('module3', 'nonexistent-module3', () => {})
 			})
 		}).then(result => {
 			expect(document.scripts[0].getAttribute).toHaveBeenCalledWith('src')

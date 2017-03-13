@@ -5,6 +5,8 @@ const sheath = require('../../../src/sheath')
 
 
 describe('sheath.lib()', () => {
+	sheath.config.mode('dev')
+	
 	it('asserts the moduleName is a string', () => {
 		expect(sheath.lib.bind(null, {})).toThrowError(/expects.*a string/i)
 	})
@@ -15,6 +17,30 @@ describe('sheath.lib()', () => {
 	
 	it('asserts the fileName is a string', () => {
 		expect(sheath.lib.bind(null, 'lib1', 'lib1Ident', {})).toThrowError(/expects.*file name.*to be a string/i)
+	})
+	
+	it('asserts that the moduleName does not start with the separator', () => {
+		return new Promise(resolve => {
+			sheath.run(resolve)
+		}).then(result => {
+			expect(sheath.lib.bind(null, '/invalid')).toThrowError(/cannot start with the separator/i)
+		})
+	})
+	
+	it('asserts that the moduleName does not start with "."', () => {
+		return new Promise(resolve => {
+			sheath.run(resolve)
+		}).then(result => {
+			expect(sheath.lib.bind(null, '../invalid')).toThrowError(/cannot be relative/i)
+		})
+	})
+	
+	it('asserts that the moduleName does not contain the accessor', () => {
+		return new Promise(resolve => {
+			sheath.run(resolve)
+		}).then(result => {
+			expect(sheath.lib.bind(null, 'invalid.module')).toThrowError(/cannot contain the accessor/i)
+		})
 	})
 	
 	it('finds a pre-declared global variable and creates a module', () => {
@@ -37,7 +63,7 @@ describe('sheath.lib()', () => {
 		})
 	})
 	
-	it('lazy-loads a file, if one is specified', () => {
+	it('lazy-loads a file, if one is specified and the globalName does not exist on the global scope', () => {
 		return new Promise(resolve => {
 			sheath.lib('testLib', 'testLib', 'test/test-lib.js')
 			sheath.run('testLib', resolve)
@@ -48,6 +74,12 @@ describe('sheath.lib()', () => {
 		})
 	})
 	
+	it('does not lazy-load a given file if the globalName already exists on the global scope', () => {
+		global.lib3 = 'lib3'
+		sheath.lib('lib3', 'lib3-file.js')
+		expect(sheath.forest('lib3')).toHaveLength(1)
+	})
+	
 	it('sets the fileName to the globalName, if globalName is a url', () => {
 		return new Promise(resolve => {
 			sheath.lib('testLib2', 'test/test-lib2.js')
@@ -55,6 +87,15 @@ describe('sheath.lib()', () => {
 		}).then(result => {
 			expect(typeof result).toBe('function')
 			expect(result()).toBe('testLib2')
+		})
+	})
+	
+	it('logs a warning if the lib could not be loaded', () => {
+		return new Promise(resolve => {
+			console.warn = resolve
+			sheath.lib('nonexistentLib', 'test/nonexistentLib.js')
+		}).then(result => {
+			expect(result).toMatch(/failed to find module/i)
 		})
 	})
 	

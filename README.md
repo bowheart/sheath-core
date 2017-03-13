@@ -20,36 +20,36 @@ Check out Sheath's coolness list:
 
 ## A simple example
 
+> Note: All examples will use es6 syntax. You've been warned.
+
 Let's create a module.
 
 ```javascript
-sheath('dagger', function() {
-	return 'a dagger'
-})
+sheath('dagger', () => 'a dagger')
 ```
 
 Simple as that. Let's break down what happened here:
 
 - We *declared* a module named 'dagger'.
-- Sheath called our function. This *defined* our module.
-- We exposed the string 'a dagger' as our module's *visage*. The visage is the public face of our module &ndash; it's what will get injected into dependents.
+- Sheath called our arrow function. This function, called a factory, *defined* the dagger module.
+- We exposed the string 'a dagger' as our module's *default export*. Our module's exports are what will get injected into dependents.
 
 Alright. Cool, I guess. Now what was the point of that?
 
 Let's create another module:
 
 ```javascript
-sheath('assassin', ['dagger'], function(dagger) {
-	return 'A deadly assassin. Weapon: ' + dagger
-})
+sheath('assassin', ['dagger'], dagger =>
+	'A deadly assassin. Weapon: ' + dagger
+)
 ```
 
 Let's break this one down:
 
 - We declared a module named 'assassin' with one dependency, 'dagger'.
 - Sheath ensured that the 'dagger' module was loaded before:
-- Sheath called our function, passing ("injecting") the dagger module's visage as the first argument. This defined our module.
-- We exposed a new string concatenated with the dagger module's visage as our module's visage.
+- Sheath called the assassin module's factory, passing ("injecting") the dagger module's default export as the first argument. This defined the assassin module.
+- We exposed a new string as the default export of the assassin module.
 
 Every module goes through this basic life cycle.
 

@@ -26,6 +26,30 @@ describe('sheath()', () => {
 		expect(sheath.bind(null, 'valid3', () => {})).not.toThrow()
 	})
 	
+	it('asserts that the module name does not start with the separator', () => {
+		return new Promise(resolve => {
+			sheath.run(resolve)
+		}).then(result => {
+			expect(sheath.bind(null, '/invalid', () => {})).toThrowError(/cannot start with the separator/i)
+		})
+	})
+	
+	it('asserts that the module name does not start with "."', () => {
+		return new Promise(resolve => {
+			sheath.run(resolve)
+		}).then(result => {
+			expect(sheath.bind(null, '../invalid', () => {})).toThrowError(/cannot be relative/i)
+		})
+	})
+	
+	it('asserts that the module name does not contain the accessor', () => {
+		return new Promise(resolve => {
+			sheath.run(resolve)
+		}).then(result => {
+			expect(sheath.bind(null, 'invalid.module', () => {})).toThrowError(/cannot contain the accessor/i)
+		})
+	})
+	
 	it('creates a module', () => {
 		return new Promise(resolve => {
 			sheath('module1', () => {
