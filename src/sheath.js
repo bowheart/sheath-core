@@ -401,7 +401,7 @@
 		
 		resolve: function(definition) {
 			this.deferring = false
-			this.saveDefinition(definition) // TODO: fix this resolved vs returned default export mutual overwrite condition
+			this.saveDefinition(definition)
 			return this.interface // for chaining
 		},
 		
@@ -477,9 +477,7 @@
 			// Defer condemning this dep until the current execution thread ends (in case its declaration occurs between now and then).
 			setTimeout(function() {
 				var data = Sheath.requestedFiles[this.fileName]
-				
-				// We're good if we aren't loading a module (so sheath hanging isn't dependent on this file) or the module actually was declared.
-				if (!this.moduleName || Sheath.declaredModules[this.moduleName]) return this.onload && this.onload(data)
+				if (this.loadSuccessful(data)) return
 				
 				if (Sheath.devMode) {
 					console.warn('Sheath.js Warning: File "' + this.fileName + '" already loaded, but no declaration found for module "' + this.moduleName + '"')
@@ -492,6 +490,14 @@
 			
 			Sheath.requestedFiles[this.fileName] = ''
 			return this.implementLoad()
+		},
+		
+		loadSuccessful: function() {
+			if (this.moduleName && !Sheath.declaredModules[this.moduleName]) return false
+			
+			// We're good if we aren't loading a module (so sheath hanging isn't dependent on this file) or the module actually was declared.
+			this.onload && this.onload(data)
+			return true
 		},
 		
 		loaded: function() {
@@ -511,9 +517,7 @@
 			loadable.onload = function(data) {
 				data = data && data.target && data.target.responseText
 				if (data) Sheath.requestedFiles[this.fileName] = data
-				
-				// We're good if we aren't loading a module (so sheath hanging isn't dependent on this file) or the module was declared.
-				if (!this.moduleName || Sheath.declaredModules[this.moduleName]) return this.onload && this.onload(data)
+				if (this.loadSuccessful(data)) return
 				
 				if (Sheath.devMode) {
 					console.warn('Sheath.js Warning: Module file successfully loaded, but module "' + this.moduleName + '" not found. Potential hang situation.')
