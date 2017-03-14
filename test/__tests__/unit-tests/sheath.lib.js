@@ -5,18 +5,16 @@ const sheath = require('../../../src/sheath')
 
 
 describe('sheath.lib()', () => {
-	sheath.config.mode('dev')
-	
-	it('asserts the moduleName is a string', () => {
-		expect(sheath.lib.bind(null, {})).toThrowError(/expects.*a string/i)
+	it('asserts that the moduleName is a string', () => {
+		expect(sheath.lib.bind(null, {})).toThrowError(/module name must be a string/i)
 	})
 	
-	it('asserts the globalName is a string', () => {
-		expect(sheath.lib.bind(null, 'lib1', {})).toThrowError(/expects.*global.*to be a string/i)
+	it('asserts that the globalName is a string', () => {
+		expect(sheath.lib.bind(null, 'lib1', {})).toThrowError(/global.*must be a string/i)
 	})
 	
-	it('asserts the fileName is a string', () => {
-		expect(sheath.lib.bind(null, 'lib1', 'lib1Ident', {})).toThrowError(/expects.*file name.*to be a string/i)
+	it('asserts that the fileName is a string', () => {
+		expect(sheath.lib.bind(null, 'lib1', 'lib1Ident', {})).toThrowError(/file name must be a string/i)
 	})
 	
 	it('asserts that the moduleName does not start with the separator', () => {
@@ -87,15 +85,6 @@ describe('sheath.lib()', () => {
 		}).then(result => {
 			expect(typeof result).toBe('function')
 			expect(result()).toBe('testLib2')
-		})
-	})
-	
-	it('logs a warning if the lib could not be loaded', () => {
-		return new Promise(resolve => {
-			console.warn = resolve
-			sheath.lib('nonexistentLib', 'test/nonexistentLib.js')
-		}).then(result => {
-			expect(result).toMatch(/failed to find module/i)
 		})
 	})
 	

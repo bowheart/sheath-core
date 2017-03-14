@@ -10,6 +10,8 @@
 		? module.exports = sheath
 		: outside.sheath = sheath
 }(this, function(inBrowser) {
+	'use strict'
+	
 	/*
 		Sheath -- A private utility for keeping track of/manipulating modules.
 		Moves all modules through this process:
@@ -48,7 +50,7 @@
 			if (this.definedModules[depName]) return module.readyDeps.push(this.definedModules[depName])
 
 			// Defer attempting to load this dep asynchronously until the current execution thread ends (in case the dep's declaration takes place between now and then).
-			setTimeout(this.loadAsync.bind(this, depName))
+			setTimeout(this.loadAsync.bind(this, [depName]))
 		},
 		
 		asyncLoaderFactory: function(moduleName, fileName, onload, sync) {
@@ -113,31 +115,42 @@
 			return a
 		},
 
+		incorporateMod: function(name, mod) {
+			if (!mod.api) throw new TypeError('Sheath.js Error: Mod "' + name + '" must have an api property.')
+			
+			sheath[name] = mod.api
+		},
+
 		isUrl: function(str) {
 			return str && typeof str === 'string' && this.URL_REGEX.test(str)
 		},
 		
-		libFactory: function(moduleName, globalName, fileName) {
-			this.validateModuleName(moduleName)
-			var newLib = new Lib(moduleName, globalName, fileName)
-			newLib.declare()
-			newLib.define()
+		load: function(fileName, onload, sync) {
+			if (typeof fileName !== 'string') {
+				throw new TypeError('Sheath.js Error - RegisteredMod.load() - File name must be a string. Received "' + typeof fileName + '".')
+			}
+			if (typeof onload !== 'function') {
+				throw new TypeError('Sheath.js Error - RegisteredMod.load() - Callback must be a function. Received "' + typeof onload + '".')
+			}
+			this.asyncLoaderFactory('', fileName, onload, sync)
 		},
 
 		/*
 			loadAsync() -- For each 'names', finds the module's filename and:
 			In the browser: Creates a <script> tag (if one hasn't been created).
-			On the server: loads and evals the file's contents.
+			On the server: loads (and evals, if a script) the file's contents.
 		*/
 		loadAsync: function(names) {
 			if (!this.asyncPhase || !this.asyncEnabled) return // lazy-loading is disabled
-			if (!Array.isArray(names)) names = [names]
 
 			for (var i = 0; i < names.length; i++) {
 				var name = names[i]
-				if (this.declaredModules[name]) continue // we've already found a declaration for this module
+				if (this.declaredModules[name] || typeof this.requestedModules[name] !== 'undefined') {
+					continue // this module has already been declared or we've already tried loading it
+				}
 
 				var filename = this.asyncResolver(name)
+				this.requestedModules[name] = filename || ''
 				if (!filename) continue // no file found for this module
 				
 				this.asyncLoaderFactory(name, filename)
@@ -146,7 +159,7 @@
 		
 		moduleFactory(name, deps, factory) {
 			this.validateModuleName(name)
-			var newModule = new Module(name, deps, factory)
+			var newModule = new (name ? Module : NamelessModule)(name, deps, factory)
 			newModule.declare()
 			newModule.define() // attempt to define this module synchronously, in case there are no deps
 		},
@@ -248,7 +261,8 @@
 		initialModules: [], // these are the modules found during the config phase that will need to be defined in the sync phase
 		mode: 'production', // by default, Sheath is in productionMode; devMode and analyzeMode must be enabled manually
 		phase: 'config', // Sheath begins in Config Phase. The two other phases will come in once all initial scripts are loaded
-		requestedFiles: [], // the filenames we've sent off requests for; ensures we don't request the same file twice
+		requestedFiles: {}, // the filenames we've sent off requests for; ensures we don't request the same file twice
+		requestedModules: {}, // the modules we've sent off requests for; ensures we don't request the same module twice
 		separator: '/', // by default, a slash indicates a submodule
 		tasks: []
 	}
@@ -264,27 +278,47 @@
 		this.depsLeft = deps.length
 		this.resolvedDeps = []
 		this.readyDeps = []
-		this.interface = Object.create(null, {
-			name: {
-				get: function() { return name }
-			},
-			exports: {
-				writable: true,
-				value: {}
-			}
-		})
-
+		
+		this.createInterface(name)
 		this.mapDeps()
 	}
 	Module.prototype = {
+		addAsDefinedModule: function() {
+			if (this.definitionSaved || this.deferring) return
+			this.definitionSaved = true
+			Sheath.addDefinedModule(this)
+		},
+		
+		createInterface: function(name) {
+			this.interface = Object.create(null, {
+				name: {
+					get: function() { return name }
+				},
+				defer: {
+					value: this.defer.bind(this)
+				},
+				exports: {
+					writable: true,
+					value: {}
+				},
+				resolve: {
+					value: this.resolve.bind(this)
+				}
+			})
+		},
+		
 		declare: function() {
-			if (!this.name) return
 			Sheath.addDeclaredModule(this)
+		},
+		
+		defer: function() {
+			if (this.defined) throw new Error('Sheath.js Error: Module.defer() must be called during the synchronous execution of the module factory')
+			this.deferring = true
+			return this.interface // for chaining
 		},
 
 		define: function() {
 			if (this.depsLeft > 0 || this.defined) return // there are more dependencies to resolve or we've already defined this module
-			this.defined = true
 			Sheath.analyzeMode ? this.saveDefinition() : this.implementDefine()
 		},
 		
@@ -365,10 +399,16 @@
 			return path.join(sep) + (path.length ? sep : '') + name
 		},
 		
+		resolve: function(definition) {
+			this.deferring = false
+			this.saveDefinition(definition) // TODO: fix this resolved vs returned default export mutual overwrite condition
+			return this.interface // for chaining
+		},
+		
 		resolveDep: function(resolvedDep) {
 			var depInfo = this.deps[resolvedDep.name]
 			
-			// If the dep is a fragment grab that, otherwise grab the resolvedDep's visage.
+			// If the dep is a fragment, find it. Otherwise, grab the resolvedDep's visage.
 			var resolvedVal = depInfo.import
 				? resolvedDep.resolveExport(depInfo.import)
 				: resolvedDep.visage
@@ -396,8 +436,9 @@
 		},
 		
 		saveDefinition: function(definition) {
+			this.defined = true
 			if (typeof definition !== 'undefined') this.interface.exports = definition // a returned definition overrides any exports
-			if (this.name) Sheath.addDefinedModule(this) // doesn't apply to nameless modules (modules added via sheath.run())
+			this.addAsDefinedModule()
 		},
 		
 		get visage() {
@@ -405,63 +446,56 @@
 		}
 	}
 	
-	var Lib = function(moduleName, globalName, fileName) {
-		this.globalName = globalName
-		this.fileName = fileName
-		Module.call(this, moduleName, [])
+	
+	/*
+		NamelessModule -- A module created via sheath.run() has less functionality than a normal module.
+	*/
+	var NamelessModule = function() {
+		Module.apply(this, arguments)
 	}
-	Lib.prototype = Object.create(Module.prototype, Sheath.toPropertyDescriptors({
-		implementDefine: function() {
-			if (this.fileName) return this.load()
-			this.onload()
-		},
-		
-		load: function() {
-			if (Sheath.global[this.globalName]) return this.onload() // globalName already exists on the global scope; don't load the library again
-			Sheath.asyncLoaderFactory(this.name, this.fileName, this.onload.bind(this), true)
-		},
-		
-		onload: function() {
-			var definition = Sheath.global[this.globalName] // grab the lib's interface off the global scope
-			if (!definition && Sheath.devMode) {
-				console.warn('Sheath.js Warning: Unable to create lib "' + this.name + '". Global property "' + this.globalName + '" not found. Make sure the library is loaded.')
-			}
-			this.saveDefinition(definition)
-		}
+	NamelessModule.prototype = Object.create(Module.prototype, Sheath.toPropertyDescriptors({
+		addAsDefinedModule: function() {},
+		createInterface: function() {},
+		declare: function() {},
+		resolveExport: function() {},
+		saveDefinition: function() {}
 	}))
 	
 	
 	/*
-		AsyncLoader -- An abstract class that defines basic functionality that all loaders should have.
+		Loader -- An abstract class to define basic functionality that all loaders need.
 	*/
-	var AsyncLoader = function(moduleName, fileName, onload, sync) {
+	var Loader = function(moduleName, fileName, onload, sync) {
 		this.moduleName = moduleName
 		this.fileName = fileName
 		this.onload = onload
 		this.sync = sync
+		this.isScript = fileName.slice(-3) === '.js'
 	}
-	AsyncLoader.prototype = {
+	Loader.prototype = {
 		abort: function() {
 			// Defer condemning this dep until the current execution thread ends (in case its declaration occurs between now and then).
 			setTimeout(function() {
-				if (Sheath.declaredModules[this.moduleName]) return this.onload && this.onload() // it actually was declared; no problems
+				var data = Sheath.requestedFiles[this.fileName]
 				
-				// This script has already been loaded.
+				// We're good if we aren't loading a module (so sheath hanging isn't dependent on this file) or the module actually was declared.
+				if (!this.moduleName || Sheath.declaredModules[this.moduleName]) return this.onload && this.onload(data)
+				
 				if (Sheath.devMode) {
 					console.warn('Sheath.js Warning: File "' + this.fileName + '" already loaded, but no declaration found for module "' + this.moduleName + '"')
 				}
-			}.bind(this), 100)
+			}.bind(this))
 		},
 		
 		load: function() {
 			if (this.loaded()) return this.abort()
 			
-			Sheath.requestedFiles.push(this.fileName)
+			Sheath.requestedFiles[this.fileName] = ''
 			return this.implementLoad()
 		},
 		
 		loaded: function() {
-			return ~Sheath.requestedFiles.indexOf(this.fileName)
+			return typeof Sheath.requestedFiles[this.fileName] !== 'undefined'
 		}
 	}
 	
@@ -470,29 +504,51 @@
 		ClientLoader -- Implement asynchronous file loading for a browser environment.
 	*/
 	var ClientLoader = function() {
-		AsyncLoader.apply(this, arguments)
+		Loader.apply(this, arguments)
 	}
-	ClientLoader.prototype = Object.create(AsyncLoader.prototype, Sheath.toPropertyDescriptors({
-		implementLoad: function() {
-			var script = document.createElement('script')
-			if (Sheath.devMode) {
-				script.onerror = function() {
-					console.warn('Sheath.js Warning: Attempt to lazy-load module "' + this.moduleName + '" failed. Potential hang situation.')
-				}.bind(this)
+	ClientLoader.prototype = Object.create(Loader.prototype, Sheath.toPropertyDescriptors({
+		attachHandlers: function(loadable) {
+			loadable.onload = function(data) {
+				data = data && data.target && data.target.responseText
+				if (data) Sheath.requestedFiles[this.fileName] = data
 				
-				script.onload = function() {
-					if (Sheath.declaredModules[this.moduleName]) return this.onload && this.onload() // it actually was declared; no problems
-					
+				// We're good if we aren't loading a module (so sheath hanging isn't dependent on this file) or the module was declared.
+				if (!this.moduleName || Sheath.declaredModules[this.moduleName]) return this.onload && this.onload(data)
+				
+				if (Sheath.devMode) {
 					console.warn('Sheath.js Warning: Module file successfully loaded, but module "' + this.moduleName + '" not found. Potential hang situation.')
-				}.bind(this)
-			}
+				}
+			}.bind(this)
+			
+			if (!Sheath.devMode) return
+			
+			loadable.onerror = function() {
+				var description = this.moduleName ? 'module "' + this.moduleName + '"' : 'file "' + this.fileName + '"'
+				console.warn('Sheath.js Warning: Attempt to lazy-load ' + description + ' failed. Potential hang situation.')
+			}.bind(this)
+		},
+		
+		implementLoad: function() {
+			return this.isScript ? this.loadScript() : this.loadOther()
+		},
+		
+		loadOther: function() {
+			var req = new Sheath.global.XMLHttpRequest()
+			req.open('GET', this.fileName, !this.sync)
+			this.attachHandlers(req)
+			req.send()
+		},
+		
+		loadScript: function() {
+			var script = document.createElement('script')
+			this.attachHandlers(script)
 			script.async = !this.sync
 			script.src = this.fileName
 			document.head.appendChild(script)
 		},
 		
 		loaded: function() {
-			if (AsyncLoader.prototype.loaded.call(this)) return true
+			if (Loader.prototype.loaded.call(this)) return true
 			var scripts = document && document.scripts || []
 			
 			return Array.prototype.filter.call(scripts, function(script) {
@@ -505,9 +561,9 @@
 		ServerLoader -- Implement asynchronous file loading for a server environment.
 	*/
 	var ServerLoader = function() {
-		AsyncLoader.apply(this, arguments)
+		Loader.apply(this, arguments)
 	}
-	ServerLoader.prototype = Object.create(AsyncLoader.prototype, Sheath.toPropertyDescriptors({
+	ServerLoader.prototype = Object.create(Loader.prototype, Sheath.toPropertyDescriptors({
 		implementLoad: function() {
 			ServerLoader.fs || (ServerLoader.fs = require('fs'))
 			ServerLoader.vm || (ServerLoader.vm = require('vm'))
@@ -535,10 +591,14 @@
 		loadComplete: function(err, fileContents) {
 			if (err) {
 				if (Sheath.devMode) {
-					console.warn('Sheath.js Warning: Failed to find module "' + this.moduleName + '" on the server. Potential hang situation.')
+					console.warn('Sheath.js Warning: Failed to find file "' + this.fileName + '" on the server. Potential hang situation.', err)
 				}
 				return
 			}
+			fileContents = fileContents.toString()
+			Sheath.requestedFiles[this.fileName] = fileContents
+			if (!this.isScript) return this.onload && this.onload(fileContents)
+			
 			ServerLoader.vm.runInContext(fileContents.toString(), ServerLoader.context)
 			if (this.onload) this.onload()
 		}
@@ -568,14 +628,14 @@
 			deps = []
 		}
 		if (typeof name !== 'string') {
-			throw new TypeError('Sheath.js Error: sheath() expects the name to be a string. Received "' + typeof name + '".')
+			throw new TypeError('Sheath.js Error - sheath() - Name must be a string. Received "' + typeof name + '".')
 		}
 		if (typeof factory !== 'function') {
-			throw new TypeError('Sheath.js Error: sheath() expects the factory to be a function. Received "' + typeof factory + '".')
+			throw new TypeError('Sheath.js Error - sheath() - Factory must be a function. Received "' + typeof factory + '".')
 		}
 		if (typeof deps === 'string') deps = [deps] // if 'deps' is a string, make it the only dependency
 		if (!Array.isArray(deps)) {
-			throw new TypeError('Sheath.js Error: sheath() expects the deps to be a string or array of strings. Received "' + typeof deps + '".')
+			throw new TypeError('Sheath.js Error - sheath() - If specified, deps must be a string or array of strings. Received "' + typeof deps + '".')
 		}
 		if (Sheath.configPhase) {
 			Sheath.initialModules.push({name: name, deps: deps, factory: factory})
@@ -827,31 +887,6 @@
 	
 	
 	/*
-		sheath.lib() -- An easy way to encapsulate/incorporate third-party libraries.
-		Returns itself for beautiful syntax when defining multiple libs.
-	*/
-	sheath.lib = function lib(moduleName, globalName, fileName) {
-		if (typeof moduleName !== 'string') {
-			throw new TypeError('Sheath.js Error: sheath.lib() expects the name to be a string. Received "' + typeof moduleName + '".')
-		}
-		// Arg swapping -- if 'globalName' is a url, it isn't a valid identifier and is actually the filename; move 'fileName' down.
-		if (Sheath.isUrl(globalName)) {
-			fileName = globalName
-			globalName = undefined
-		}
-		if (!globalName) globalName = moduleName // allow overload: sheath.lib('Backbone')
-		if (typeof globalName !== 'string') {
-			throw new TypeError('Sheath.js Error: sheath.lib() expects the global identifier to be a string. Received "' + typeof globalName + '".')
-		}
-		if (fileName && typeof fileName !== 'string') {
-			throw new TypeError('Sheath.js Error: sheath.lib() expects file name to be a string, if specified. Received "' + typeof fileName + '".')
-		}
-		Sheath.libFactory(moduleName, globalName, fileName)
-		return lib
-	}
-	
-	
-	/*
 		sheath.missing() -- Returns the names of all the modules the app is waiting on.
 		These are modules that have been listed as dependencies of other modules, but that haven't been declared yet.
 		Call this from the console when you suspect the app is hanging.
@@ -952,6 +987,37 @@
 
 
 	/*
+		sheath.registerMod() -- Register a modifier.
+		Modifiers allow for the existence of custom module types.
+		A modifier can define behavior for the declaration, loading, definition, and injection of a custom module type.
+	*/
+	sheath.registerMod = function(name, factory) {
+		if (typeof name !== 'string') {
+			throw new TypeError('Sheath.js Error - sheath.registerMod() - Mod name must be a string. Received "' + typeof name + '".')
+		}
+		
+		// The new mod will share the sheath namespace, so make sure it doesn't conflict.
+		if (sheath[name]) {
+			throw new Error('Sheath.js Error - sheath.registerMod() - Mod name "' + name + '" already exists in the sheath namespace.')
+		}
+		
+		if (typeof factory !== 'function') {
+			throw new TypeError('Sheath.js Error - sheath.registerMod() - Factory must be a function. Received "' + typeof factory + '".')
+		}
+		
+		// Call the factory to set up the modifier.
+		var mod = factory(Sheath.load.bind(Sheath))
+		
+		if (typeof mod !== 'object') {
+			throw new TypeError('Sheath.js Error - sheath.registerMod() - Mod factory must return an object. Received "' + typeof mod + '".')
+		}
+		
+		Sheath.incorporateMod(name, mod)
+		return sheath // for chaining
+	}
+
+
+	/*
 		sheath.run() -- Run some code that leverages Sheath's dependency injection, but without declaring a module.
 		Useful for circumventing circular dependencies.
 		The 'deps' arg is optional, so this can also be used to defer execution until after the config phase.
@@ -1023,6 +1089,66 @@
 		return 'I Am Sheath'
 	}
 
+
+
+	/*
+		sheath.lib() -- An easy way to encapsulate/incorporate third-party libraries.
+		An example of a modifier.
+	*/
+	sheath.registerMod('lib', function(load) {
+		var api = function(moduleName, globalName, fileName) {
+			if (typeof moduleName !== 'string') {
+				throw new TypeError('Sheath.js Error - sheath.lib() - Module name must be a string. Received "' + typeof moduleName + '".')
+			}
+			// Arg swapping -- if 'globalName' is a url, it isn't a valid identifier and is actually the filename; move 'fileName' down.
+			if (Sheath.isUrl(globalName)) {
+				fileName = globalName
+				globalName = undefined
+			}
+			if (!globalName) globalName = moduleName // allow overload: sheath.lib('Backbone')
+			if (typeof globalName !== 'string') {
+				throw new TypeError('Sheath.js Error - sheath.lib() - Global identifier must be a string. Received "' + typeof globalName + '".')
+			}
+			if (fileName && typeof fileName !== 'string') {
+				throw new TypeError('Sheath.js Error - sheath.lib() - File name must be a string, if specified. Received "' + typeof fileName + '".')
+			}
+			var lib = new Lib(moduleName, globalName, fileName)
+			lib.declare()
+			return api
+		}
+		
+		var Lib = function(moduleName, globalName, fileName) {
+			this.name = moduleName
+			this.globalName = globalName
+			this.fileName = fileName
+		}
+		Lib.prototype = {
+			declare: function() {
+				sheath(this.name, [], this.factory.bind(this))
+			},
+			
+			factory: function() {
+				var module = sheath.current()
+				if (!this.fileName || Sheath.global[this.globalName]) return this.onload()
+				
+				module.defer()
+				load(this.fileName, this.onload.bind(this, module), true)
+			},
+			
+			onload: function(module) {
+				var definition = Sheath.global[this.globalName] // grab the lib's api off the global scope
+				if (typeof definition === 'undefined' && Sheath.devMode) {
+					console.warn('Sheath.js Warning: Unable to create lib "' + this.name + '". Global property "' + this.globalName + '" not found. Make sure the library is loaded.')
+				}
+				// Account for sync and async resolution.
+				return module ? module.resolve(definition) : definition
+			}
+		}
+		
+		return {
+			api: api
+		}
+	})
 
 
 

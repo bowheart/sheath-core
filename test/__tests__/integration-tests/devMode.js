@@ -15,9 +15,27 @@ describe('devMode enables advanced debugging tools', () => {
 			sheath('module1', 'nonexistent-module', () => {})
 			setTimeout(() => {
 				setTimeout(() => { // timeout again to get past the start of the async phase
-					console.warn = warning => resolve(warning)
+					console.warn = resolve
 					mockScript.onerror() // trigger the onerror event handler that Sheath put on our mock script
 				})
+			})
+		}).then(result => {
+			expect(result).toMatch(/attempt to.*load.*failed/i)
+		})
+	})
+	
+	it('logs a warning when an attempt to fetch a non-.js file asynchronously fails', () => {
+		return new Promise(resolve => {
+			
+			global.XMLHttpRequest = function() {
+				this.open = () => {}
+				console.warn = resolve
+				this.send = () => this.onerror()
+			}
+			
+			sheath.registerMod('mod1', load => {
+				load('nonexistent-file.txt', () => {})
+				return {api: 'the-api'}
 			})
 		}).then(result => {
 			expect(result).toMatch(/attempt to.*load.*failed/i)
@@ -55,7 +73,7 @@ describe('devMode enables advanced debugging tools', () => {
 				}]
 			})
 			setTimeout(() => {
-				console.warn = warning => resolve(warning)
+				console.warn = resolve
 				sheath('module3', 'nonexistent-module3', () => {})
 			})
 		}).then(result => {

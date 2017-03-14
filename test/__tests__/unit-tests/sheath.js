@@ -10,12 +10,12 @@ describe('sheath()', () => {
 	})
 	
 	it('asserts that the name is a string', () => {
-		expect(sheath.bind(null, {}, () => {})).toThrowError(/expects .* a string/i)
+		expect(sheath.bind(null, {}, () => {})).toThrowError(/name must be a string/i)
 	})
 	
 	it('asserts that a function is passed', () => {
-		expect(sheath.bind(null, 'invalid', 'func')).toThrowError(/expects .*a function/i)
-		expect(sheath.bind(null, 'invalid', [], 'func')).toThrowError(/expects .*a function/i)
+		expect(sheath.bind(null, 'invalid', 'func')).toThrowError(/factory must be a function/i)
+		expect(sheath.bind(null, 'invalid', [], 'func')).toThrowError(/factory must be a function/i)
 	})
 	
 	it('asserts that the deps is a string or array', () => {
