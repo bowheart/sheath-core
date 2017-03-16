@@ -60,7 +60,7 @@
 
 		/*
 			asyncResolver() -- takes a module's name and returns the filename--the `src` attribute of an async <script> tag to request this module.
-			This is just the default! It is meant to be overridden using sheath.asyncResolver() (below).
+			This is just the default! It is meant to be overridden using sheath.config.asyncResolver() (below).
 		*/
 		asyncResolver: function(module) {
 			// The default async filename resolver just assumes that the module name is the filepath minus the '.js' extension.
@@ -117,22 +117,16 @@
 
 		incorporateMod: function(name, mod) {
 			if (!mod.api) throw new TypeError('Sheath.js Error: Mod "' + name + '" must have an api property.')
+			if (mod.handle && typeof mod.handle !== 'function') {
+				throw new TypeError('Sheath.js Error: Mod "handle" property must be a function for mod "' + name + '".')
+			}
 			
-			sheath[name] = mod.api
+			sheath[name] = mod.api // stick the mod's api in the sheath namespace
+			if (mod.handle) this.mods[name] = mod.handle
 		},
 
 		isUrl: function(str) {
 			return str && typeof str === 'string' && this.URL_REGEX.test(str)
-		},
-		
-		load: function(fileName, onload, sync) {
-			if (typeof fileName !== 'string') {
-				throw new TypeError('Sheath.js Error - RegisteredMod.load() - File name must be a string. Received "' + typeof fileName + '".')
-			}
-			if (typeof onload !== 'function') {
-				throw new TypeError('Sheath.js Error - RegisteredMod.load() - Callback must be a function. Received "' + typeof onload + '".')
-			}
-			this.asyncLoaderFactory('', fileName, onload, sync)
 		},
 
 		/*
@@ -157,7 +151,7 @@
 			}
 		},
 		
-		moduleFactory(name, deps, factory) {
+		moduleFactory: function(name, deps, factory) {
 			this.validateModuleName(name)
 			var newModule = new (name ? Module : NamelessModule)(name, deps, factory)
 			newModule.declare()
@@ -261,11 +255,12 @@
 		initialModules: [], // these are the modules found during the config phase that will need to be defined in the sync phase
 		mode: 'production', // by default, Sheath is in productionMode; devMode and analyzeMode must be enabled manually
 		phase: 'config', // Sheath begins in Config Phase. The two other phases will come in once all initial scripts are loaded
-		requestedFiles: {}, // the filenames we've sent off requests for; ensures we don't request the same file twice
-		requestedModules: {}, // the modules we've sent off requests for; ensures we don't request the same module twice
+		requestedFiles: {}, // the filenames we've sent off requests for; eliminates duplicate requests; maps file names to content returned
+		requestedModules: {}, // the modules we've sent off requests for; eliminates duplicate requests; maps module names to file names
 		separator: '/', // by default, a slash indicates a submodule
 		tasks: []
 	}
+	
 	
 	
 	/*
@@ -446,7 +441,6 @@
 		}
 	}
 	
-	
 	/*
 		NamelessModule -- A module created via sheath.run() has less functionality than a normal module.
 	*/
@@ -460,6 +454,7 @@
 		resolveExport: function() {},
 		saveDefinition: function() {}
 	}))
+	
 	
 	
 	/*
@@ -492,10 +487,10 @@
 			return this.implementLoad()
 		},
 		
-		loadSuccessful: function() {
+		loadSuccessful: function(data) {
 			if (this.moduleName && !Sheath.declaredModules[this.moduleName]) return false
 			
-			// We're good if we aren't loading a module (so sheath hanging isn't dependent on this file) or the module actually was declared.
+			// We're good if we aren't loading a module (so app hang isn't dependent on this file) or the module actually was declared.
 			this.onload && this.onload(data)
 			return true
 		},
@@ -504,7 +499,6 @@
 			return typeof Sheath.requestedFiles[this.fileName] !== 'undefined'
 		}
 	}
-	
 	
 	/*
 		ClientLoader -- Implement asynchronous file loading for a browser environment.
@@ -891,6 +885,21 @@
 	
 	
 	/*
+		sheath.load() -- Load a file. Behavior is different for .js files and non-.js files
+		
+	*/
+	sheath.load = function(fileName, onload, sync) {
+		if (typeof fileName !== 'string') {
+			throw new TypeError('Sheath.js Error - sheath.load() - File name must be a string. Received "' + typeof fileName + '".')
+		}
+		if (onload && typeof onload !== 'function') {
+			throw new TypeError('Sheath.js Error - sheath.load() - Callback must be a function, if specified. Received "' + typeof onload + '".')
+		}
+		Sheath.asyncLoaderFactory('', fileName, onload, sync)
+	}
+	
+	
+	/*
 		sheath.missing() -- Returns the names of all the modules the app is waiting on.
 		These are modules that have been listed as dependencies of other modules, but that haven't been declared yet.
 		Call this from the console when you suspect the app is hanging.
@@ -1010,7 +1019,7 @@
 		}
 		
 		// Call the factory to set up the modifier.
-		var mod = factory(Sheath.load.bind(Sheath))
+		var mod = factory()
 		
 		if (typeof mod !== 'object') {
 			throw new TypeError('Sheath.js Error - sheath.registerMod() - Mod factory must return an object. Received "' + typeof mod + '".')
@@ -1097,9 +1106,9 @@
 
 	/*
 		sheath.lib() -- An easy way to encapsulate/incorporate third-party libraries.
-		An example of a modifier.
+		An example of an unprefixed modifier.
 	*/
-	sheath.registerMod('lib', function(load) {
+	sheath.registerMod('lib', function() {
 		var api = function(moduleName, globalName, fileName) {
 			if (typeof moduleName !== 'string') {
 				throw new TypeError('Sheath.js Error - sheath.lib() - Module name must be a string. Received "' + typeof moduleName + '".')
@@ -1128,7 +1137,7 @@
 		}
 		Lib.prototype = {
 			declare: function() {
-				sheath(this.name, [], this.factory.bind(this))
+				sheath(this.name, this.factory.bind(this))
 			},
 			
 			factory: function() {
@@ -1136,7 +1145,7 @@
 				if (!this.fileName || Sheath.global[this.globalName]) return this.onload()
 				
 				module.defer()
-				load(this.fileName, this.onload.bind(this, module), true)
+				sheath.load(this.fileName, this.onload.bind(this, module), true)
 			},
 			
 			onload: function(module) {
@@ -1151,6 +1160,68 @@
 		
 		return {
 			api: api
+		}
+	})
+
+
+	/*
+		sheath.text() -- An easy way to inject content as modules--e.g. for underscore/handlebars templating.
+		An example of a prefixed modifier.
+	*/
+	sheath.registerMod('text', function() {
+		var textModules = {}
+		var loading = {}
+		
+		var api = function(name, content) {
+			if (typeof textModules[name] !== 'undefined') {
+				throw new Error('Sheath.js Error - sheath.text() - A text module with name "' + name + '" already exists')
+			}
+			
+			resolve(name, content)
+		}
+		
+		var handle = function(name, onCreated) {
+			// Resolve immediately if we've already loaded this text module.
+			if (typeof textModules[name] !== 'undefined')  return onCreated(textModules[name])
+			
+			// If we've already requested this text module, add this resolver to that module's resolver list.
+			if (loading[name]) return loading[name].push(onCreated)
+			
+			loading[name] = [onCreated]
+			sheath.load(name, onload.bind(null, name))
+		}
+		
+		var onload = function(name, content) {
+			if (typeof textModules[name] !== 'undefined') return // the text module was defined in the .js file
+			if (typeof content !== 'undefined') {
+				return resolve(name, content)
+			}
+			
+			// Defer condemning this text module until the current execution thread ends (in case its declaration occurs between now and then).
+			setTimeout(function() {
+				// It actually was defined or we're ignoring the failed load:
+				if (typeof textModules[name] !== 'undefined' || !Sheath.devMode) return // will have already been resolved by this point
+				
+				console.warn('Sheath.js Warning: Failed to load text module "' + name + '". Potential hang situation.')
+			})
+		}
+		
+		var resolve = function(name, content) {
+			textModules[name] = content
+			
+			var resolverList = loading[name]
+			if (!resolverList || !resolverList.length) return // nothing to resolve
+			
+			while (resolverList.length) {
+				resolverList.shift()(content)
+			}
+			loading[name] = undefined
+		}
+		
+		return {
+			api: api,
+			handle: handle,
+			prefix: 'text!'
 		}
 	})
 
