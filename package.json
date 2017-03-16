@@ -31,6 +31,6 @@
   },
   "homepage": "https://github.com/bowheart/sheath.js#readme",
   "jest": {
-    "collectCoverage": true
+    "collectCoverage": false
   }
 }

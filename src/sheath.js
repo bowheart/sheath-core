@@ -228,13 +228,18 @@
 			}
 			
 			var sep = this.separator
-			if (sep && name.slice(0, sep.length) === sep) {
-				throw new Error('Sheath.js Error: Module names cannot start with the separator ("' + sep + '"). The culprit: "' + name + '"')
+			if (sep && (name.slice(0, sep.length) === sep || name.slice(-sep.length) === sep)) {
+				throw new Error('Sheath.js Error: Module names cannot start or end with the separator ("' + sep + '"). The culprit: "' + name + '"')
 			}
 			
 			var acc = this.accessor
 			if (acc && ~name.indexOf(acc)) {
 				throw new Error('Sheath.js Error: Module names cannot contain the accessor ("' + acc + '"). The culprit: "' + name + '"')
+			}
+			
+			var pipe = this.TYPE_PIPE
+			if (~name.indexOf(pipe)) {
+				throw new Error('Sheath.js Error: Module names cannot contain the type pipe ("' + pipe + '"). The culprit: "' + name + '"')
 			}
 		},
 		
@@ -246,6 +251,8 @@
 			return inBrowser ? window : global
 		},
 		
+		TYPE_PIPE: '!',
+		
 		accessor: '.', // by default, a period accesses a module fragment
 		asyncEnabled: true, // async is enabled by default
 		constants: {},
@@ -254,9 +261,10 @@
 		dependents: {}, // map dependencies to all dependents found for that module; this turns defining a module into a simple lookup -- O(1)
 		initialModules: [], // these are the modules found during the config phase that will need to be defined in the sync phase
 		mode: 'production', // by default, Sheath is in productionMode; devMode and analyzeMode must be enabled manually
+		mods: {}, // the mod handlers for all registered mods; these will be called to handle injection of their custom module types
 		phase: 'config', // Sheath begins in Config Phase. The two other phases will come in once all initial scripts are loaded
-		requestedFiles: {}, // the filenames we've sent off requests for; eliminates duplicate requests; maps file names to content returned
-		requestedModules: {}, // the modules we've sent off requests for; eliminates duplicate requests; maps module names to file names
+		requestedFiles: {}, // the filenames we've sent off requests for; catches duplicate requests; maps file names to content returned
+		requestedModules: {}, // the modules we've sent off requests for; catches duplicate requests; maps module names to file names
 		separator: '/', // by default, a slash indicates a submodule
 		tasks: []
 	}
