@@ -220,6 +220,17 @@
 			})
 		},
 		
+		validateDepName: function(moduleName, oldName, newName) {
+			if (!newName) {
+				throw new Error('Sheath.js Error: Module "' + moduleName + '" has an empty dependency ("' + oldName + '"). You must specify a name for the dependency.')
+			}
+			
+			var sep = this.separator
+			if (newName.slice(-sep.length) === sep) {
+				throw new Error('Sheath.js Error: Module "' + moduleName + '" has an invalid dependency ("' + oldName + '"). Dependencies cannot end with the separator ("' + sep + '").')
+			}
+		},
+		
 		validateModuleName: function(name) {
 			if (!name) return // nothing to validate
 			
@@ -237,9 +248,9 @@
 				throw new Error('Sheath.js Error: Module names cannot contain the accessor ("' + acc + '"). The culprit: "' + name + '"')
 			}
 			
-			var pipe = this.TYPE_PIPE
+			var pipe = this.MOD_PIPE
 			if (~name.indexOf(pipe)) {
-				throw new Error('Sheath.js Error: Module names cannot contain the type pipe ("' + pipe + '"). The culprit: "' + name + '"')
+				throw new Error('Sheath.js Error: Module names cannot contain the mod pipe ("' + pipe + '"). The culprit: "' + name + '"')
 			}
 		},
 		
@@ -251,7 +262,7 @@
 			return inBrowser ? window : global
 		},
 		
-		TYPE_PIPE: '!',
+		MOD_PIPE: '!',
 		
 		accessor: '.', // by default, a period accesses a module fragment
 		asyncEnabled: true, // async is enabled by default
@@ -333,10 +344,12 @@
 			this.saveDefinition(definition)
 		},
 		
-		// Determine if the dep is relative ("../", "./", "/") or an import ("module.import").
+		// Determine if the dep is a custom type ("type!module") relative ("../", "./", "/") or an import ("module.import").
 		mapDep: function(name) {
-			name = this.parseRelativeDep(name)
-			return this.parseImport(name)
+			var dep = this.parseMods(name)
+			dep.name = this.parseRelativeDep(dep.name)
+			if (!dep.mods.length) this.parseImport(dep) // imports only apply to internal modules; let the mod handle all other characters
+			return dep
 		},
 
 		// Replace the array of deps with a map of depName -> depInfo.
@@ -360,8 +373,9 @@
 			this.resolveReadyDeps()
 		},
 		
-		parseImport: function(name) {
-			var sep = Sheath.separator,
+		parseImport: function(dep) {
+			var name = dep.name,
+				sep = Sheath.separator,
 				acc = Sheath.accessor
 			
 			if (!acc) return {name: name} // fragments are disabled if the Accessor is set to ''
@@ -369,14 +383,25 @@
 			var modulePath = name.split(sep),
 				importPath = modulePath.pop().split(acc)
 			
+			dep.name = modulePath.join(sep) + (modulePath.length ? sep : '') + importPath.shift(),
+			dep.import = importPath.length ? importPath : false
+		},
+		
+		parseMods: function(name) {
+			var mods = name.split(Sheath.MOD_PIPE),
+				newName = mods.pop()
+			
+			Sheath.validateDepName(this.name, name, newName)
+			
 			return {
-				name: modulePath.join(sep) + (modulePath.length ? sep : '') + importPath.shift(),
-				import: importPath.length ? importPath : false
+				name: newName,
+				mods: mods.reverse() // mods are applied in reverse order
 			}
 		},
 		
 		parseRelativeDep: function(name) {
 			var sep = Sheath.separator
+			
 			if (!sep) return name // relative paths are disabled if the Separator is set to ''
 			
 			// sheath('module', '/submodule') -> resolves to 'module/submodule'

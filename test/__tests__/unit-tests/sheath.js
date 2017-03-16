@@ -59,11 +59,11 @@ describe('sheath()', () => {
 		})
 	})
 	
-	it('asserts that the module name does not contain the type pipe', () => {
+	it('asserts that the module name does not contain the mod pipe', () => {
 		return new Promise(resolve => {
 			sheath.run(resolve)
 		}).then(result => {
-			expect(sheath.bind(null, 'invalid!module', () => {})).toThrowError(/cannot contain the type pipe/i)
+			expect(sheath.bind(null, 'invalid!module', () => {})).toThrowError(/cannot contain the mod pipe/i)
 		})
 	})
 	
