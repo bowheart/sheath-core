@@ -131,12 +131,12 @@
 
 		incorporateMod: function(name, mod) {
 			if (!mod.api) throw new TypeError('Sheath.js Error: Mod "' + name + '" must have an api property.')
-			if (mod.handle && typeof mod.handle !== 'function') {
-				throw new TypeError('Sheath.js Error: Mod "handle" property must be a function for mod "' + name + '".')
+			if (typeof mod.handle !== 'function') {
+				throw new TypeError('Sheath.js Error: Mod "' + name + '" must have a "handle" function.')
 			}
 			
 			sheath[name] = mod.api // stick the mod's api in the sheath namespace
-			if (mod.handle) this.mods[name] = mod.handle
+			this.mods[name] = mod.handle
 		},
 
 		isUrl: function(str) {
@@ -1250,8 +1250,13 @@
 			}
 		}
 		
+		var handle = function(name, onCreated, previous) {
+			throw new Error('Sheath.js Error: The lib modifier disallows prefixed deps (e.g. "lib!MyLib"). Use sheath.lib() during the config phase to create your libs, then include them as unprefixed deps.')
+		}
+		
 		return {
-			api: api
+			api: api,
+			handle: handle
 		}
 	})
 
@@ -1272,8 +1277,9 @@
 			resolve(name, content)
 		}
 		
-		var handle = function(name, onCreated) {
-			// Resolve immediately if we've already loaded this text module.
+		var handle = function(name, onCreated, previous) {
+			// Resolve immediately if we've already loaded this text module or a chained mod gave us a previous definition.
+			if (typeof previous !== 'undefined') return onCreated(previous)
 			if (typeof textModules[name] !== 'undefined')  return onCreated(textModules[name])
 			
 			// If we've already requested this text module, add this resolver to that module's resolver list.
