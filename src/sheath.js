@@ -509,7 +509,9 @@
 		createInterface: function() {},
 		declare: function() {},
 		resolveExport: function() {},
-		saveDefinition: function() {}
+		saveDefinition: function() {
+			this.defined = true
+		}
 	}))
 	
 	/*
@@ -1297,7 +1299,6 @@
 		}
 		
 		var resolve = function(name, content) {
-			console.log('resolve text module', name, content)
 			textModules[name] = content
 			
 			var resolverList = loading[name]
