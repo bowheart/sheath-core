@@ -33,8 +33,8 @@ describe('devMode enables advanced debugging tools', () => {
 				this.send = () => this.onerror()
 			}
 			
-			sheath.registerMod('mod1', load => {
-				load('nonexistent-file.txt', () => {})
+			sheath.registerMod('mod1', () => {
+				sheath.load('nonexistent-file.txt', () => {})
 				return {api: 'the-api'}
 			})
 		}).then(result => {
@@ -78,7 +78,7 @@ describe('devMode enables advanced debugging tools', () => {
 			})
 		}).then(result => {
 			expect(document.scripts[0].getAttribute).toHaveBeenCalledWith('src')
-			expect(result).toMatch(/file.*already loaded.*no declaration found/i)
+			expect(result).toMatch(/file.*loaded.*module.*not found/i)
 		})
 	})
 })

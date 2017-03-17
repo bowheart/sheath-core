@@ -51,14 +51,6 @@ describe('sheath()', () => {
 		})
 	})
 	
-	it('asserts that the module name does not contain the accessor', () => {
-		return new Promise(resolve => {
-			sheath.run(resolve)
-		}).then(result => {
-			expect(sheath.bind(null, 'invalid.module', () => {})).toThrowError(/cannot contain the accessor/i)
-		})
-	})
-	
 	it('asserts that the module name does not contain the mod pipe', () => {
 		return new Promise(resolve => {
 			sheath.run(resolve)

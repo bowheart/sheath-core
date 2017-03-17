@@ -404,7 +404,7 @@
 			var modulePath = name.split(sep),
 				importPath = modulePath.pop().split(acc)
 			
-			dep.name = modulePath.join(sep) + (modulePath.length ? sep : '') + importPath.shift(),
+			dep.name = modulePath.join(sep) + (modulePath.length ? sep : '') + importPath.shift()
 			dep.import = importPath.length ? importPath : false
 		},
 		
@@ -554,17 +554,14 @@
 		this.onload = onload
 		this.sync = sync
 		this.isScript = fileName.slice(-3) === '.js'
+		this.loadSuccessful = this.isScript ? this.scriptSuccessful.bind(this) : this.contentSuccessful.bind(this)
 	}
 	Loader.prototype = {
 		abort: function() {
 			// Defer condemning this dep until the current execution thread ends (in case its declaration occurs between now and then).
 			setTimeout(function() {
 				var data = Sheath.requestedFiles[this.fileName]
-				if (this.loadSuccessful(data)) return
-				
-				if (Sheath.devMode) {
-					console.warn('Sheath.js Warning: File "' + this.fileName + '" already loaded, but no declaration found for module "' + this.moduleName + '"')
-				}
+				this.loadSuccessful(data)
 			}.bind(this))
 		},
 		
@@ -608,7 +605,7 @@
 	}
 	ClientLoader.prototype = Object.create(Loader.prototype, Sheath.toPropertyDescriptors({
 		attachHandlers: function(loadable) {
-			loadable.onload = this.isScript ? this.scriptSuccessful.bind(this) : this.contentSuccessful.bind(this)
+			loadable.onload = this.loadSuccessful
 			
 			if (!Sheath.devMode) return
 			
@@ -1250,8 +1247,8 @@
 			}
 		}
 		
-		var handle = function(name, onCreated, previous) {
-			throw new Error('Sheath.js Error: The lib modifier disallows prefixed deps (e.g. "lib!MyLib"). Use sheath.lib() during the config phase to create your libs, then include them as unprefixed deps.')
+		var handle = function(name, resolve, previous) {
+			throw new Error('Sheath.js Error: The lib modifier does not support prefixed dependencies (e.g. "lib!MyLib"). Use sheath.lib() during the config phase to create a lib, then include it as an unprefixed dependency.')
 		}
 		
 		return {
@@ -1270,22 +1267,26 @@
 		var loading = {}
 		
 		var api = function(name, content) {
+			if (typeof name !== 'string') {
+				throw new TypeError('Sheath.js Error - sheath.text() - Name must be a string. Received "' + typeof name + '".')
+			}
 			if (typeof textModules[name] !== 'undefined') {
+				if (typeof content === 'undefined') return textModules[name]
 				throw new Error('Sheath.js Error - sheath.text() - A text module with name "' + name + '" already exists')
 			}
 			
 			resolve(name, content)
 		}
 		
-		var handle = function(name, onCreated, previous) {
+		var handle = function(name, resolve, previous) {
 			// Resolve immediately if we've already loaded this text module or a chained mod gave us a previous definition.
-			if (typeof previous !== 'undefined') return onCreated(previous)
-			if (typeof textModules[name] !== 'undefined')  return onCreated(textModules[name])
+			if (typeof previous !== 'undefined') return resolve(previous)
+			if (typeof textModules[name] !== 'undefined')  return resolve(textModules[name])
 			
 			// If we've already requested this text module, add this resolver to that module's resolver list.
-			if (loading[name]) return loading[name].push(onCreated)
+			if (loading[name]) return loading[name].push(resolve)
 			
-			loading[name] = [onCreated]
+			loading[name] = [resolve]
 			sheath.load(name, onload.bind(null, name))
 		}
 		
