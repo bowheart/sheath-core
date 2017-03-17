@@ -18,7 +18,23 @@
 		[declaration received] -> [added to 'declaredModules' list] -> [dependencies defined] -> [definitionFunction called] -> [added to 'definedModules' list]
 	*/
 	var Sheath = {
+		MOD_PIPE: '!',
 		URL_REGEX: /\/|\./,
+		
+		accessor: '.', // by default, a period accesses a module fragment
+		asyncEnabled: true, // async is enabled by default
+		constants: {},
+		declaredModules: {}, // keeps track of all module declarations we've encountered throughout the lifetime of this app
+		definedModules: {},
+		dependents: {}, // map dependencies to all dependents found for that module; this turns defining a module into a simple lookup -- O(1)
+		initialModules: [], // these are the modules found during the config phase that will need to be defined in the sync phase
+		mode: 'production', // by default, Sheath is in productionMode; devMode and analyzeMode must be enabled manually
+		mods: {}, // the mod handlers for all registered mods; these will be called to handle injection of their custom module types
+		phase: 'config', // Sheath begins in Config Phase. The two other phases will come in once all initial scripts are loaded
+		requestedFiles: {}, // the filenames we've sent off requests for; catches duplicate requests; maps file names to content returned
+		requestedModules: {}, // the modules we've sent off requests for; catches duplicate requests; maps module names to file names
+		separator: '/', // by default, a slash indicates a submodule
+		tasks: [],
 		
 		addDeclaredModule: function(module) {
 			if (this.declaredModules[module.name]) throw new Error('Sheath.js Error: Multiple modules with the same name found. Name: "' + module.name + '"')
@@ -35,6 +51,7 @@
 
 			if (!this.dependents[module.name]) return // nothing more to do
 
+			// Resolve all dependencies met by this module.
 			var dependents = this.dependents[module.name]
 			for (var i = 0; i < dependents.length; i++) {
 				var dependent = dependents[i]
@@ -47,10 +64,7 @@
 			this.dependents[depName].push(module)
 
 			// If the dep is already met, check it off the module's list.
-			if (this.definedModules[depName]) return module.readyDeps.push(this.definedModules[depName])
-
-			// Defer attempting to load this dep asynchronously until the current execution thread ends (in case the dep's declaration takes place between now and then).
-			setTimeout(this.loadAsync.bind(this, [depName]))
+			if (this.definedModules[depName]) module.readyDeps.push(this.definedModules[depName])
 		},
 		
 		asyncLoaderFactory: function(moduleName, fileName, onload, sync) {
@@ -157,6 +171,20 @@
 			newModule.declare()
 			newModule.define() // attempt to define this module synchronously, in case there are no deps
 		},
+		
+		scheduleDepLoad: function(dep) {
+			if (!dep.mods.length) {
+				// Defer attempting to load this dep asynchronously until the current execution thread ends (in case the dep's declaration takes place between now and then).
+				return setTimeout(this.loadAsync.bind(this, [dep.name]))
+			}
+			
+			// Sheath doesn't handle auto-loading custom modules. Create a Module with the dep and tell its mods to load it.
+			if (this.declaredModules[dep.name]) return // a module of this dep has already been created; nothing to do here
+			
+			var newModule = new CustomModule(dep)
+			newModule.declare()
+			newModule.applyMods()
+		},
 
 		taskEnd: function() {
 			this.tasks.pop()
@@ -231,6 +259,14 @@
 			}
 		},
 		
+		validateMods: function(moduleName, mods) {
+			for (var i = 0; i < mods.length; i++) {
+				if (this.mods[mods[i]]) continue
+				
+				throw new Error('Sheath.js Error: Dependency for module "' + moduleName + '" is requesting an unregistered modifier "' + mods[i] + '". Make sure the mod is loaded during the config phase.')
+			}
+		},
+		
 		validateModuleName: function(name) {
 			if (!name) return // nothing to validate
 			
@@ -260,24 +296,7 @@
 		get asyncPhase() { return this.phase === 'async' },
 		get global() {
 			return inBrowser ? window : global
-		},
-		
-		MOD_PIPE: '!',
-		
-		accessor: '.', // by default, a period accesses a module fragment
-		asyncEnabled: true, // async is enabled by default
-		constants: {},
-		declaredModules: {}, // keeps track of all module declarations we've encountered throughout the lifetime of this app
-		definedModules: {},
-		dependents: {}, // map dependencies to all dependents found for that module; this turns defining a module into a simple lookup -- O(1)
-		initialModules: [], // these are the modules found during the config phase that will need to be defined in the sync phase
-		mode: 'production', // by default, Sheath is in productionMode; devMode and analyzeMode must be enabled manually
-		mods: {}, // the mod handlers for all registered mods; these will be called to handle injection of their custom module types
-		phase: 'config', // Sheath begins in Config Phase. The two other phases will come in once all initial scripts are loaded
-		requestedFiles: {}, // the filenames we've sent off requests for; catches duplicate requests; maps file names to content returned
-		requestedModules: {}, // the modules we've sent off requests for; catches duplicate requests; maps module names to file names
-		separator: '/', // by default, a slash indicates a submodule
-		tasks: []
+		}
 	}
 	
 	
@@ -347,7 +366,8 @@
 		// Determine if the dep is a custom type ("type!module") relative ("../", "./", "/") or an import ("module.import").
 		mapDep: function(name) {
 			var dep = this.parseMods(name)
-			dep.name = this.parseRelativeDep(dep.name)
+			dep.rawName = this.parseRelativeDep(dep.name) // the rawName is the name with relative paths resolved and no mods prefixed
+			dep.name = dep.modsStr + dep.rawName // the name is the rawName with mods prefixed
 			if (!dep.mods.length) this.parseImport(dep) // imports only apply to internal modules; let the mod handle all other characters
 			return dep
 		},
@@ -366,6 +386,7 @@
 				
 				rawDeps.push(mappedDep.name)
 				Sheath.addDependent(this, mappedDep.name)
+				Sheath.scheduleDepLoad(mappedDep)
 				mappedDeps[mappedDep.name] = mappedDep
 			}
 			this.rawDeps = rawDeps
@@ -388,13 +409,16 @@
 		},
 		
 		parseMods: function(name) {
-			var mods = name.split(Sheath.MOD_PIPE),
+			var pipe = Sheath.MOD_PIPE,
+				mods = name.split(pipe),
 				newName = mods.pop()
 			
 			Sheath.validateDepName(this.name, name, newName)
+			if (mods.length) Sheath.validateMods(this.name, mods)
 			
 			return {
 				name: newName,
+				modsStr: mods.join(pipe) + (mods.length ? pipe : ''),
 				mods: mods.reverse() // mods are applied in reverse order
 			}
 		},
@@ -488,6 +512,35 @@
 		saveDefinition: function() {}
 	}))
 	
+	/*
+	
+	*/
+	var CustomModule = function(dep) {
+		this.rawName = dep.rawName
+		this.name = dep.name
+		this.deps = []
+		this.mods = dep.mods
+	}
+	CustomModule.prototype = Object.create(Module.prototype, Sheath.toPropertyDescriptors({
+		applyMods: function(definition) {
+			var nextMod = this.mods.shift()
+			Sheath.mods[nextMod](this.rawName, this.resolveMod.bind(this), definition) // this is a mod's handle function signature
+		},
+		
+		implementDefine: function() {}, // no-op
+		
+		resolveMod: function(definition) {
+			if (this.mods.length) return this.applyMods(definition) // recurse until there are no more mods
+			
+			this.definition = definition
+			this.addAsDefinedModule()
+		},
+		
+		get visage() {
+			return this.definition
+		}
+	}))
+	
 	
 	
 	/*
@@ -513,6 +566,18 @@
 			}.bind(this))
 		},
 		
+		contentSuccessful: function(data) {
+			if (!this.onload) return // nothing to do
+			
+			var status = data.target.status,
+				content = data.target.response,
+				args = [undefined, content]
+			
+			Sheath.requestedFiles[this.fileName] = content
+			if (status >= 400) args.shift() // there was an error; make the message the first argument
+			this.onload.apply(null, args)
+		},
+		
 		load: function() {
 			if (this.loaded()) return this.abort()
 			
@@ -520,16 +585,16 @@
 			return this.implementLoad()
 		},
 		
-		loadSuccessful: function(data) {
-			if (this.moduleName && !Sheath.declaredModules[this.moduleName]) return false
-			
-			// We're good if we aren't loading a module (so app hang isn't dependent on this file) or the module actually was declared.
-			this.onload && this.onload(data)
-			return true
-		},
-		
 		loaded: function() {
 			return typeof Sheath.requestedFiles[this.fileName] !== 'undefined'
+		},
+		
+		scriptSuccessful: function() {
+			if (this.onload) this.onload()
+			
+			if (Sheath.devMode && this.moduleName && !Sheath.declaredModules[this.moduleName]) {
+				console.warn('Sheath.js Warning: Module file successfully loaded, but module "' + this.moduleName + '" not found. Potential hang situation.')
+			}
 		}
 	}
 	
@@ -541,15 +606,7 @@
 	}
 	ClientLoader.prototype = Object.create(Loader.prototype, Sheath.toPropertyDescriptors({
 		attachHandlers: function(loadable) {
-			loadable.onload = function(data) {
-				data = data && data.target && data.target.responseText
-				if (data) Sheath.requestedFiles[this.fileName] = data
-				if (this.loadSuccessful(data)) return
-				
-				if (Sheath.devMode) {
-					console.warn('Sheath.js Warning: Module file successfully loaded, but module "' + this.moduleName + '" not found. Potential hang situation.')
-				}
-			}.bind(this)
+			loadable.onload = this.isScript ? this.scriptSuccessful.bind(this) : this.contentSuccessful.bind(this)
 			
 			if (!Sheath.devMode) return
 			
@@ -1181,9 +1238,9 @@
 				sheath.load(this.fileName, this.onload.bind(this, module), true)
 			},
 			
-			onload: function(module) {
+			onload: function(module, err) {
 				var definition = Sheath.global[this.globalName] // grab the lib's api off the global scope
-				if (typeof definition === 'undefined' && Sheath.devMode) {
+				if (err || typeof definition === 'undefined' && Sheath.devMode) {
 					console.warn('Sheath.js Warning: Unable to create lib "' + this.name + '". Global property "' + this.globalName + '" not found. Make sure the library is loaded.')
 				}
 				// Account for sync and async resolution.
@@ -1224,7 +1281,7 @@
 			sheath.load(name, onload.bind(null, name))
 		}
 		
-		var onload = function(name, content) {
+		var onload = function(name, err, content) {
 			if (typeof textModules[name] !== 'undefined') return // the text module was defined in the .js file
 			if (typeof content !== 'undefined') {
 				return resolve(name, content)
@@ -1233,13 +1290,14 @@
 			// Defer condemning this text module until the current execution thread ends (in case its declaration occurs between now and then).
 			setTimeout(function() {
 				// It actually was defined or we're ignoring the failed load:
-				if (typeof textModules[name] !== 'undefined' || !Sheath.devMode) return // will have already been resolved by this point
+				if (!Sheath.devMode || typeof textModules[name] !== 'undefined') return // will have already been resolved by this point
 				
 				console.warn('Sheath.js Warning: Failed to load text module "' + name + '". Potential hang situation.')
 			})
 		}
 		
 		var resolve = function(name, content) {
+			console.log('resolve text module', name, content)
 			textModules[name] = content
 			
 			var resolverList = loading[name]
@@ -1253,8 +1311,7 @@
 		
 		return {
 			api: api,
-			handle: handle,
-			prefix: 'text!'
+			handle: handle
 		}
 	})
 
