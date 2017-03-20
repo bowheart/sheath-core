@@ -40,7 +40,7 @@ Let's create another module:
 
 ```javascript
 sheath('assassin', ['dagger'], dagger =>
-	'A deadly assassin. Weapon: ' + dagger
+    'A deadly assassin. Weapon: ' + dagger
 )
 ```
 

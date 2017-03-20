@@ -25,19 +25,19 @@ describe('sheath.lib()', () => {
 		})
 	})
 	
-	it('asserts that the moduleName does not start ore end with the separator', () => {
+	it('asserts that the moduleName does not start or end with "/"', () => {
 		return new Promise(resolve => {
 			sheath.run(resolve)
 		}).then(result => {
-			expect(sheath.lib.bind(null, '/invalid')).toThrowError(/cannot start or end with the separator/i)
+			expect(sheath.lib.bind(null, '/invalid')).toThrowError(/cannot start or end with "\/"/i)
 		})
 	})
 	
-	it('asserts that the moduleName does not contain the accessor', () => {
+	it('asserts that the moduleName does not contain "."', () => {
 		return new Promise(resolve => {
 			sheath.run(resolve)
 		}).then(result => {
-			expect(sheath.lib.bind(null, 'invalid.module')).toThrowError(/cannot contain the accessor/i)
+			expect(sheath.lib.bind(null, 'invalid.module')).toThrowError(/cannot contain "\."/i)
 		})
 	})
 	

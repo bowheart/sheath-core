@@ -43,12 +43,12 @@ describe('sheath()', () => {
 		})
 	})
 	
-	it('asserts that deps do not end with the separator', () => {
+	it('asserts that deps do not end with "/"', () => {
 		return new Promise(resolve => {
 			sheath.run(resolve)
 		}).then(result => {
-			expect(sheath.bind(null, 'invalid', 'dep/', () => {})).toThrowError(/cannot end with the separator/i)
-			expect(sheath.bind(null, 'invalid', ['dep', 'dep2/'], () => {})).toThrowError(/cannot end with the separator/i)
+			expect(sheath.bind(null, 'invalid', 'dep/', () => {})).toThrowError(/cannot end with "\/"/i)
+			expect(sheath.bind(null, 'invalid', ['dep', 'dep2/'], () => {})).toThrowError(/cannot end with "\/"/i)
 		})
 	})
 	
@@ -68,20 +68,20 @@ describe('sheath()', () => {
 		})
 	})
 	
-	it('asserts that the module name does not start or end with the separator', () => {
+	it('asserts that the module name does not start or end with "/"', () => {
 		return new Promise(resolve => {
 			sheath.run(resolve)
 		}).then(result => {
-			expect(sheath.bind(null, '/invalid', () => {})).toThrowError(/cannot start or end with the separator/i)
-			expect(sheath.bind(null, 'invalid/', () => {})).toThrowError(/cannot start or end with the separator/i)
+			expect(sheath.bind(null, '/invalid', () => {})).toThrowError(/cannot start or end with "\/"/i)
+			expect(sheath.bind(null, 'invalid/', () => {})).toThrowError(/cannot start or end with "\/"/i)
 		})
 	})
 	
-	it('asserts that the module name does not contain the accessor', () => {
+	it('asserts that the module name does not contain "."', () => {
 		return new Promise(resolve => {
 			sheath.run(resolve)
 		}).then(result => {
-			expect(sheath.bind(null, 'invalid.module', () => {})).toThrowError(/cannot contain the accessor/i)
+			expect(sheath.bind(null, 'invalid.module', () => {})).toThrowError(/cannot contain "\."/i)
 		})
 	})
 	
@@ -170,7 +170,7 @@ describe('sheath()', () => {
 		})
 	})
 	
-	it('can require submodules of the current module by prefixing the dep name with the Separator', () => {
+	it('can require submodules of the current module by prefixing the dep name with "/"', () => {
 		return new Promise(resolve => {
 			sheath('module8', ['/one', '/two'], (one, two) => {
 				resolve(one + two)
@@ -182,7 +182,7 @@ describe('sheath()', () => {
 		})
 	})
 	
-	it('can require siblings of the current module by prefixing the dep name with "." + the Separator', () => {
+	it('can require siblings of the current module by prefixing the dep name with "./"', () => {
 		return new Promise(resolve => {
 			sheath('module9/a', ['./b', './c'], (b, c) => {
 				resolve(b + c)
@@ -194,7 +194,7 @@ describe('sheath()', () => {
 		})
 	})
 	
-	it('can require uncles, great-uncles, etc of the current module by prefixing the dep name with ".." + the Separator (chained indefinitely)', () => {
+	it('can require uncles, great-uncles, etc of the current module by prefixing the dep name with "../" (chained indefinitely)', () => {
 		return new Promise(resolve => {
 			sheath('module10/one/a', ['../two', '../../module9/b'], (two, b) => {
 				resolve(two + b)
