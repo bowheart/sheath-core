@@ -15,7 +15,7 @@
 	/*
 		Sheath -- A private utility for keeping track of/manipulating modules.
 		Moves all modules through this process:
-		[declaration received] -> [added to 'declaredModules' list] -> [dependencies defined] -> [definitionFunction called] -> [added to 'definedModules' list]
+		[declaration received] -> [added to 'declaredModules' list] -> [dependencies defined] -> [factory called] -> [added to 'definedModules' list]
 	*/
 	var Sheath = {
 		ACCESSOR: '.',
@@ -255,7 +255,7 @@
 			
 			var sep = this.SEPARATOR
 			if (newName.slice(-sep.length) === sep) {
-				throw new Error('Sheath.js Error: Module "' + moduleName + '" has an invalid dependency ("' + oldName + '"). Dependencies cannot end with the separator ("' + sep + '").')
+				throw new Error('Sheath.js Error: Module "' + moduleName + '" has an invalid dependency ("' + oldName + '"). Dependencies cannot end with "' + sep + '".')
 			}
 		},
 		
@@ -273,23 +273,24 @@
 			if (!name) {
 				throw new Error('Sheath.js Error: Module names cannot be empty')
 			}
+			var culprit = '. The culprit: "' + name + '"'
 			if (name[0] === '.') {
-				throw new Error('Sheath.js Error: Module names cannot be relative (start with "."). The culprit: "' + name + '"')
+				throw new Error('Sheath.js Error: Module names cannot be relative (start with ".")' + culprit)
 			}
 			
 			var sep = this.SEPARATOR
 			if (sep && (name.slice(0, sep.length) === sep || name.slice(-sep.length) === sep)) {
-				throw new Error('Sheath.js Error: Module names cannot start or end with the separator ("' + sep + '"). The culprit: "' + name + '"')
+				throw new Error('Sheath.js Error: Module names cannot start or end with "' + sep + '"' + culprit)
 			}
 			
 			var acc = this.ACCESSOR
 			if (acc && ~name.indexOf(acc)) {
-				throw new Error('Sheath.js Error: Module names cannot contain the accessor ("' + acc + '"). The culprit: "' + name + '"')
+				throw new Error('Sheath.js Error: Module names cannot contain "' + acc + '"' + culprit)
 			}
 			
 			var pipe = this.MOD_PIPE
 			if (~name.indexOf(pipe)) {
-				throw new Error('Sheath.js Error: Module names cannot contain the mod pipe ("' + pipe + '"). The culprit: "' + name + '"')
+				throw new Error('Sheath.js Error: Module names cannot contain the mod pipe ("' + pipe + '")' + culprit)
 			}
 		},
 		
@@ -404,8 +405,6 @@
 				sep = Sheath.SEPARATOR,
 				acc = Sheath.ACCESSOR
 			
-			if (!acc) return {name: name} // fragments are disabled if the Accessor is set to ''
-			
 			var modulePath = name.split(sep),
 				importPath = modulePath.pop().split(acc)
 			
@@ -430,8 +429,6 @@
 		
 		parseRelativeDep: function(name) {
 			var sep = Sheath.SEPARATOR
-			
-			if (!sep) return name // relative paths are disabled if the Separator is set to ''
 			
 			// sheath('module', '/submodule') -> resolves to 'module/submodule'
 			if (name.slice(0, sep.length) === sep) {
