@@ -26,6 +26,40 @@ describe('sheath()', () => {
 		expect(sheath.bind(null, 'valid3', () => {})).not.toThrow()
 	})
 	
+	it('asserts that all deps in a deps array are strings', () => {
+		return new Promise(resolve => {
+			sheath.run(resolve)
+		}).then(result => {
+			expect(sheath.bind(null, 'invalid', [{}], () => {})).toThrowError(/module dependencies must be strings/i)
+		})
+	})
+	
+	it('asserts that deps are not empty', () => {
+		return new Promise(resolve => {
+			sheath.run(resolve)
+		}).then(result => {
+			expect(sheath.bind(null, 'invalid', '', () => {})).toThrowError(/has an empty dependency/i)
+			expect(sheath.bind(null, 'invalid', ['dep', ''], () => {})).toThrowError(/has an empty dependency/i)
+		})
+	})
+	
+	it('asserts that deps do not end with the separator', () => {
+		return new Promise(resolve => {
+			sheath.run(resolve)
+		}).then(result => {
+			expect(sheath.bind(null, 'invalid', 'dep/', () => {})).toThrowError(/cannot end with the separator/i)
+			expect(sheath.bind(null, 'invalid', ['dep', 'dep2/'], () => {})).toThrowError(/cannot end with the separator/i)
+		})
+	})
+	
+	it('asserts that the module name is not empty', () => {
+		return new Promise(resolve => {
+			sheath.run(resolve)
+		}).then(result => {
+			expect(sheath.bind(null, '', () => {})).toThrowError(/cannot be empty/i)
+		})
+	})
+	
 	it('asserts that the module name does not start with "."', () => {
 		return new Promise(resolve => {
 			sheath.run(resolve)

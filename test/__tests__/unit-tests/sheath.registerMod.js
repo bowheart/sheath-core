@@ -34,4 +34,12 @@ describe('sheath.registerMod()', () => {
 		sheath.registerMod('mod1', () => (testMod))
 		expect(sheath.mod1).toBe('the-api')
 	})
+	
+	it('throws an error if a module attempts to use an unregistered modifier', () => {
+		return new Promise(resolve => {
+			setTimeout(resolve)
+		}).then(result => {
+			expect(sheath.bind(null, 'module', 'badmod!badmodule', () => {})).toThrowError(/module.*is requesting an unregistered modifier/i)
+		})
+	})
 })

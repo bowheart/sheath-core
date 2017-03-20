@@ -23,7 +23,15 @@ describe('sheath.load()', () => {
 	
 	it('loads a text file, returning its contents', () => {
 		return new Promise(resolve => {
-			sheath.load('test/text-file.txt', resolve)
+			sheath.load('test/text-file.txt', (err, content) => resolve(content))
+		}).then(result => {
+			expect(result.trim()).toBe('with text in it')
+		})
+	})
+	
+	it('saves the contents of all requested files--never requesting the same file twice', () => {
+		return new Promise(resolve => {
+			sheath.load('test/text-file.txt', (err, content) => resolve(content))
 		}).then(result => {
 			expect(result.trim()).toBe('with text in it')
 		})

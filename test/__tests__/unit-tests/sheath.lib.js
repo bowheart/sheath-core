@@ -99,4 +99,8 @@ describe('sheath.lib()', () => {
 	it('cannot declare the same lib twice', () => {
 		expect(sheath.lib.bind(null, 'lib1')).toThrowError(/multiple modules.*same name/i)
 	})
+	
+	it('does not provide a handler for lib! modules', () => {
+		expect(sheath.run.bind(null, 'lib!SomeLib', () => {})).toThrowError(/does not support prefixed dependencies/i)
+	})
 })

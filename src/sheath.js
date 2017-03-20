@@ -268,8 +268,11 @@
 		},
 		
 		validateModuleName: function(name) {
-			if (!name) return // nothing to validate
+			if (name === false) return // a NamelessModule; ignore
 			
+			if (!name) {
+				throw new Error('Sheath.js Error: Module names cannot be empty')
+			}
 			if (name[0] === '.') {
 				throw new Error('Sheath.js Error: Module names cannot be relative (start with "."). The culprit: "' + name + '"')
 			}
@@ -379,7 +382,9 @@
 			
 			for (var i = 0; i < this.deps.length; i++) {
 				var depName = this.deps[i]
-				if (!depName) continue
+				if (typeof depName !== 'string') {
+					throw new TypeError('Sheath.js Error: All module dependencies must be strings. Received "' + typeof depName + '".')
+				}
 				
 				var mappedDep = this.mapDep(depName)
 				mappedDep.index = i
@@ -565,15 +570,18 @@
 			}.bind(this))
 		},
 		
-		contentSuccessful: function(data) {
+		contentSuccessful: function(content) {
 			if (!this.onload) return // nothing to do
 			
-			var status = data.target.status,
-				content = data.target.response,
-				args = [undefined, content]
+			if (typeof content !== 'string') {
+				// It's an xhr.
+				var status = content.target.status
+				content = content.target.response
+			}
+			var args = [null, content]
 			
 			Sheath.requestedFiles[this.fileName] = content
-			if (status >= 400) args.shift() // there was an error; make the message the first argument
+			if (typeof status !== 'undefined' && status >= 400) args.shift() // there was an error; make the message the first argument
 			this.onload.apply(null, args)
 		},
 		
@@ -589,7 +597,7 @@
 		},
 		
 		scriptSuccessful: function() {
-			if (this.onload) this.onload()
+			if (this.onload) this.onload(null)
 			
 			if (Sheath.devMode && this.moduleName && !Sheath.declaredModules[this.moduleName]) {
 				console.warn('Sheath.js Warning: Module file successfully loaded, but module "' + this.moduleName + '" not found. Potential hang situation.')
@@ -680,14 +688,14 @@
 				if (Sheath.devMode) {
 					console.warn('Sheath.js Warning: Failed to find file "' + this.fileName + '" on the server. Potential hang situation.', err)
 				}
-				return
+				return this.onload && this.onload(err)
 			}
 			fileContents = fileContents.toString()
 			Sheath.requestedFiles[this.fileName] = fileContents
-			if (!this.isScript) return this.onload && this.onload(fileContents)
+			if (!this.isScript) return this.onload && this.onload(err, fileContents)
 			
 			ServerLoader.vm.runInContext(fileContents.toString(), ServerLoader.context)
-			if (this.onload) this.onload()
+			if (this.onload) this.onload(err)
 		}
 	}))
 
@@ -1138,10 +1146,10 @@
 			throw new TypeError('Sheath.js Error: sheath.run() expects the deps to be a string or array of strings. Received "' + typeof deps + '".')
 		}
 		if (Sheath.configPhase) {
-			Sheath.initialModules.push({name: '', deps: deps, factory: func})
+			Sheath.initialModules.push({name: false, deps: deps, factory: func})
 			return
 		}
-		Sheath.moduleFactory('', deps, func)
+		Sheath.moduleFactory(false, deps, func)
 		return sheath // for chaining
 	}
 	
@@ -1292,17 +1300,7 @@
 		
 		var onload = function(name, err, content) {
 			if (typeof textModules[name] !== 'undefined') return // the text module was defined in the .js file
-			if (typeof content !== 'undefined') {
-				return resolve(name, content)
-			}
-			
-			// Defer condemning this text module until the current execution thread ends (in case its declaration occurs between now and then).
-			setTimeout(function() {
-				// It actually was defined or we're ignoring the failed load:
-				if (!Sheath.devMode || typeof textModules[name] !== 'undefined') return // will have already been resolved by this point
-				
-				console.warn('Sheath.js Warning: Failed to load text module "' + name + '". Potential hang situation.')
-			})
+			if (typeof content !== 'undefined') return resolve(name, content)
 		}
 		
 		var resolve = function(name, content) {

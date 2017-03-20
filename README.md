@@ -13,7 +13,7 @@ Check out Sheath's coolness list:
 - Dependency injection.
 - Asynchronous script loading.
 - Utilities for easily creating common types of modules.
-- A flow that works well with MVC frameworks such as Backbone, React, and Mithril.
+- Designed to improve the flow of frameworks such as Backbone, React, Inferno, and Mithril.
 - Awesome debugging tools, including opt-in circular dependency detection.
 - Even awesomer dependency graph analysis tools available server-side for easy automation.
 - Highly optimized code. Most of Sheath's algorithms are simple lookups &ndash; O(1) time.
@@ -31,8 +31,8 @@ sheath('dagger', () => 'a dagger')
 Simple as that. Let's break down what happened here:
 
 - We *declared* a module named 'dagger'.
-- Sheath called our arrow function. This function, called a factory, *defined* the dagger module.
-- We exposed the string 'a dagger' as our module's *default export*. Our module's exports are what will get injected into dependents.
+- Sheath called our arrow function. This function is our module's *factory*. The factory *defined* our module.
+- We exposed the string `'a dagger'` as our module's *default export*. Our module's exports are what will get injected into dependents.
 
 Alright. Cool, I guess. Now what was the point of that?
 
@@ -47,7 +47,7 @@ sheath('assassin', ['dagger'], dagger =>
 Let's break this one down:
 
 - We declared a module named 'assassin' with one dependency, 'dagger'.
-- Sheath ensured that the 'dagger' module was loaded before:
+- Sheath ensured that the dagger module was loaded before:
 - Sheath called the assassin module's factory, passing ("injecting") the dagger module's default export as the first argument. This defined the assassin module.
 - We exposed a new string as the default export of the assassin module.
 
