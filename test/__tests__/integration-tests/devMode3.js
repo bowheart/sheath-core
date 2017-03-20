@@ -33,4 +33,13 @@ describe('devMode enables even more advanced debugging tools', () => {
 			expect(result).toMatch(/failed to find file.*on the server/i)
 		})
 	})
+	
+	it('logs a warning if a text module fails to load', () => {
+		return new Promise(resolve => {
+			console.warn = resolve
+			sheath.run('text!nonexistent-file.txt', () => {})
+		}).then(result => {
+			expect(result).toMatch(/failed to find file/i)
+		})
+	})
 })

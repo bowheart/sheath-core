@@ -18,7 +18,23 @@
 		[declaration received] -> [added to 'declaredModules' list] -> [dependencies defined] -> [definitionFunction called] -> [added to 'definedModules' list]
 	*/
 	var Sheath = {
+		MOD_PIPE: '!',
 		URL_REGEX: /\/|\./,
+		
+		accessor: '.', // by default, a period accesses a module fragment
+		asyncEnabled: true, // async is enabled by default
+		constants: {},
+		declaredModules: {}, // keeps track of all module declarations we've encountered throughout the lifetime of this app
+		definedModules: {},
+		dependents: {}, // map dependencies to all dependents found for that module; this turns defining a module into a simple lookup -- O(1)
+		initialModules: [], // these are the modules found during the config phase that will need to be defined in the sync phase
+		mode: 'production', // by default, Sheath is in productionMode; devMode and analyzeMode must be enabled manually
+		mods: {}, // the mod handlers for all registered mods; these will be called to handle injection of their custom module types
+		phase: 'config', // Sheath begins in Config Phase. The two other phases will come in once all initial scripts are loaded
+		requestedFiles: {}, // the filenames we've sent off requests for; catches duplicate requests; maps file names to content returned
+		requestedModules: {}, // the modules we've sent off requests for; catches duplicate requests; maps module names to file names
+		separator: '/', // by default, a slash indicates a submodule
+		tasks: [],
 		
 		addDeclaredModule: function(module) {
 			if (this.declaredModules[module.name]) throw new Error('Sheath.js Error: Multiple modules with the same name found. Name: "' + module.name + '"')
@@ -35,6 +51,7 @@
 
 			if (!this.dependents[module.name]) return // nothing more to do
 
+			// Resolve all dependencies met by this module.
 			var dependents = this.dependents[module.name]
 			for (var i = 0; i < dependents.length; i++) {
 				var dependent = dependents[i]
@@ -47,10 +64,7 @@
 			this.dependents[depName].push(module)
 
 			// If the dep is already met, check it off the module's list.
-			if (this.definedModules[depName]) return module.readyDeps.push(this.definedModules[depName])
-
-			// Defer attempting to load this dep asynchronously until the current execution thread ends (in case the dep's declaration takes place between now and then).
-			setTimeout(this.loadAsync.bind(this, [depName]))
+			if (this.definedModules[depName]) module.readyDeps.push(this.definedModules[depName])
 		},
 		
 		asyncLoaderFactory: function(moduleName, fileName, onload, sync) {
@@ -60,7 +74,7 @@
 
 		/*
 			asyncResolver() -- takes a module's name and returns the filename--the `src` attribute of an async <script> tag to request this module.
-			This is just the default! It is meant to be overridden using sheath.asyncResolver() (below).
+			This is just the default! It is meant to be overridden using sheath.config.asyncResolver() (below).
 		*/
 		asyncResolver: function(module) {
 			// The default async filename resolver just assumes that the module name is the filepath minus the '.js' extension.
@@ -117,22 +131,16 @@
 
 		incorporateMod: function(name, mod) {
 			if (!mod.api) throw new TypeError('Sheath.js Error: Mod "' + name + '" must have an api property.')
+			if (typeof mod.handle !== 'function') {
+				throw new TypeError('Sheath.js Error: Mod "' + name + '" must have a "handle" function.')
+			}
 			
-			sheath[name] = mod.api
+			sheath[name] = mod.api // stick the mod's api in the sheath namespace
+			this.mods[name] = mod.handle
 		},
 
 		isUrl: function(str) {
 			return str && typeof str === 'string' && this.URL_REGEX.test(str)
-		},
-		
-		load: function(fileName, onload, sync) {
-			if (typeof fileName !== 'string') {
-				throw new TypeError('Sheath.js Error - RegisteredMod.load() - File name must be a string. Received "' + typeof fileName + '".')
-			}
-			if (typeof onload !== 'function') {
-				throw new TypeError('Sheath.js Error - RegisteredMod.load() - Callback must be a function. Received "' + typeof onload + '".')
-			}
-			this.asyncLoaderFactory('', fileName, onload, sync)
 		},
 
 		/*
@@ -157,11 +165,25 @@
 			}
 		},
 		
-		moduleFactory(name, deps, factory) {
+		moduleFactory: function(name, deps, factory) {
 			this.validateModuleName(name)
 			var newModule = new (name ? Module : NamelessModule)(name, deps, factory)
 			newModule.declare()
 			newModule.define() // attempt to define this module synchronously, in case there are no deps
+		},
+		
+		scheduleDepLoad: function(dep) {
+			if (!dep.mods.length) {
+				// Defer attempting to load this dep asynchronously until the current execution thread ends (in case the dep's declaration takes place between now and then).
+				return setTimeout(this.loadAsync.bind(this, [dep.name]))
+			}
+			
+			// Sheath doesn't handle auto-loading custom modules. Create a Module with the dep and tell its mods to load it.
+			if (this.declaredModules[dep.name]) return // a module of this dep has already been created; nothing to do here
+			
+			var newModule = new CustomModule(dep)
+			newModule.declare()
+			newModule.applyMods()
 		},
 
 		taskEnd: function() {
@@ -226,21 +248,48 @@
 			})
 		},
 		
-		validateModuleName: function(name) {
-			if (!name) return // nothing to validate
+		validateDepName: function(moduleName, oldName, newName) {
+			if (!newName) {
+				throw new Error('Sheath.js Error: Module "' + moduleName + '" has an empty dependency ("' + oldName + '"). You must specify a name for the dependency.')
+			}
 			
+			var sep = this.separator
+			if (newName.slice(-sep.length) === sep) {
+				throw new Error('Sheath.js Error: Module "' + moduleName + '" has an invalid dependency ("' + oldName + '"). Dependencies cannot end with the separator ("' + sep + '").')
+			}
+		},
+		
+		validateMods: function(moduleName, mods) {
+			for (var i = 0; i < mods.length; i++) {
+				if (this.mods[mods[i]]) continue
+				
+				throw new Error('Sheath.js Error: Dependency for module "' + moduleName + '" is requesting an unregistered modifier "' + mods[i] + '". Make sure the mod is loaded during the config phase.')
+			}
+		},
+		
+		validateModuleName: function(name) {
+			if (name === false) return // a NamelessModule; ignore
+			
+			if (!name) {
+				throw new Error('Sheath.js Error: Module names cannot be empty')
+			}
 			if (name[0] === '.') {
 				throw new Error('Sheath.js Error: Module names cannot be relative (start with "."). The culprit: "' + name + '"')
 			}
 			
 			var sep = this.separator
-			if (sep && name.slice(0, sep.length) === sep) {
-				throw new Error('Sheath.js Error: Module names cannot start with the separator ("' + sep + '"). The culprit: "' + name + '"')
+			if (sep && (name.slice(0, sep.length) === sep || name.slice(-sep.length) === sep)) {
+				throw new Error('Sheath.js Error: Module names cannot start or end with the separator ("' + sep + '"). The culprit: "' + name + '"')
 			}
 			
 			var acc = this.accessor
 			if (acc && ~name.indexOf(acc)) {
 				throw new Error('Sheath.js Error: Module names cannot contain the accessor ("' + acc + '"). The culprit: "' + name + '"')
+			}
+			
+			var pipe = this.MOD_PIPE
+			if (~name.indexOf(pipe)) {
+				throw new Error('Sheath.js Error: Module names cannot contain the mod pipe ("' + pipe + '"). The culprit: "' + name + '"')
 			}
 		},
 		
@@ -250,22 +299,9 @@
 		get asyncPhase() { return this.phase === 'async' },
 		get global() {
 			return inBrowser ? window : global
-		},
-		
-		accessor: '.', // by default, a period accesses a module fragment
-		asyncEnabled: true, // async is enabled by default
-		constants: {},
-		declaredModules: {}, // keeps track of all module declarations we've encountered throughout the lifetime of this app
-		definedModules: {},
-		dependents: {}, // map dependencies to all dependents found for that module; this turns defining a module into a simple lookup -- O(1)
-		initialModules: [], // these are the modules found during the config phase that will need to be defined in the sync phase
-		mode: 'production', // by default, Sheath is in productionMode; devMode and analyzeMode must be enabled manually
-		phase: 'config', // Sheath begins in Config Phase. The two other phases will come in once all initial scripts are loaded
-		requestedFiles: {}, // the filenames we've sent off requests for; ensures we don't request the same file twice
-		requestedModules: {}, // the modules we've sent off requests for; ensures we don't request the same module twice
-		separator: '/', // by default, a slash indicates a submodule
-		tasks: []
+		}
 	}
+	
 	
 	
 	/*
@@ -330,10 +366,13 @@
 			this.saveDefinition(definition)
 		},
 		
-		// Determine if the dep is relative ("../", "./", "/") or an import ("module.import").
+		// Determine if the dep is a custom type ("type!module") relative ("../", "./", "/") or an import ("module.import").
 		mapDep: function(name) {
-			name = this.parseRelativeDep(name)
-			return this.parseImport(name)
+			var dep = this.parseMods(name)
+			dep.rawName = this.parseRelativeDep(dep.name) // the rawName is the name with relative paths resolved and no mods prefixed
+			dep.name = dep.modsStr + dep.rawName // the name is the rawName with mods prefixed
+			if (!dep.mods.length) this.parseImport(dep) // imports only apply to internal modules; let the mod handle all other characters
+			return dep
 		},
 
 		// Replace the array of deps with a map of depName -> depInfo.
@@ -343,13 +382,16 @@
 			
 			for (var i = 0; i < this.deps.length; i++) {
 				var depName = this.deps[i]
-				if (!depName) continue
+				if (typeof depName !== 'string') {
+					throw new TypeError('Sheath.js Error: All module dependencies must be strings. Received "' + typeof depName + '".')
+				}
 				
 				var mappedDep = this.mapDep(depName)
 				mappedDep.index = i
 				
 				rawDeps.push(mappedDep.name)
 				Sheath.addDependent(this, mappedDep.name)
+				Sheath.scheduleDepLoad(mappedDep)
 				mappedDeps[mappedDep.name] = mappedDep
 			}
 			this.rawDeps = rawDeps
@@ -357,8 +399,9 @@
 			this.resolveReadyDeps()
 		},
 		
-		parseImport: function(name) {
-			var sep = Sheath.separator,
+		parseImport: function(dep) {
+			var name = dep.name,
+				sep = Sheath.separator,
 				acc = Sheath.accessor
 			
 			if (!acc) return {name: name} // fragments are disabled if the Accessor is set to ''
@@ -366,14 +409,28 @@
 			var modulePath = name.split(sep),
 				importPath = modulePath.pop().split(acc)
 			
+			dep.name = modulePath.join(sep) + (modulePath.length ? sep : '') + importPath.shift()
+			dep.import = importPath.length ? importPath : false
+		},
+		
+		parseMods: function(name) {
+			var pipe = Sheath.MOD_PIPE,
+				mods = name.split(pipe),
+				newName = mods.pop()
+			
+			Sheath.validateDepName(this.name, name, newName)
+			if (mods.length) Sheath.validateMods(this.name, mods)
+			
 			return {
-				name: modulePath.join(sep) + (modulePath.length ? sep : '') + importPath.shift(),
-				import: importPath.length ? importPath : false
+				name: newName,
+				modsStr: mods.join(pipe) + (mods.length ? pipe : ''),
+				mods: mods.reverse() // mods are applied in reverse order
 			}
 		},
 		
 		parseRelativeDep: function(name) {
 			var sep = Sheath.separator
+			
 			if (!sep) return name // relative paths are disabled if the Separator is set to ''
 			
 			// sheath('module', '/submodule') -> resolves to 'module/submodule'
@@ -446,7 +503,6 @@
 		}
 	}
 	
-	
 	/*
 		NamelessModule -- A module created via sheath.run() has less functionality than a normal module.
 	*/
@@ -458,8 +514,40 @@
 		createInterface: function() {},
 		declare: function() {},
 		resolveExport: function() {},
-		saveDefinition: function() {}
+		saveDefinition: function() {
+			this.defined = true
+		}
 	}))
+	
+	/*
+	
+	*/
+	var CustomModule = function(dep) {
+		this.rawName = dep.rawName
+		this.name = dep.name
+		this.deps = []
+		this.mods = dep.mods
+	}
+	CustomModule.prototype = Object.create(Module.prototype, Sheath.toPropertyDescriptors({
+		applyMods: function(definition) {
+			var nextMod = this.mods.shift()
+			Sheath.mods[nextMod](this.rawName, this.resolveMod.bind(this), definition) // this is a mod's handle function signature
+		},
+		
+		implementDefine: function() {}, // no-op
+		
+		resolveMod: function(definition) {
+			if (this.mods.length) return this.applyMods(definition) // recurse until there are no more mods
+			
+			this.definition = definition
+			this.addAsDefinedModule()
+		},
+		
+		get visage() {
+			return this.definition
+		}
+	}))
+	
 	
 	
 	/*
@@ -471,18 +559,30 @@
 		this.onload = onload
 		this.sync = sync
 		this.isScript = fileName.slice(-3) === '.js'
+		this.loadSuccessful = this.isScript ? this.scriptSuccessful.bind(this) : this.contentSuccessful.bind(this)
 	}
 	Loader.prototype = {
 		abort: function() {
 			// Defer condemning this dep until the current execution thread ends (in case its declaration occurs between now and then).
 			setTimeout(function() {
 				var data = Sheath.requestedFiles[this.fileName]
-				if (this.loadSuccessful(data)) return
-				
-				if (Sheath.devMode) {
-					console.warn('Sheath.js Warning: File "' + this.fileName + '" already loaded, but no declaration found for module "' + this.moduleName + '"')
-				}
+				this.loadSuccessful(data)
 			}.bind(this))
+		},
+		
+		contentSuccessful: function(content) {
+			if (!this.onload) return // nothing to do
+			
+			if (typeof content !== 'string') {
+				// It's an xhr.
+				var status = content.target.status
+				content = content.target.response
+			}
+			var args = [null, content]
+			
+			Sheath.requestedFiles[this.fileName] = content
+			if (typeof status !== 'undefined' && status >= 400) args.shift() // there was an error; make the message the first argument
+			this.onload.apply(null, args)
 		},
 		
 		load: function() {
@@ -492,19 +592,18 @@
 			return this.implementLoad()
 		},
 		
-		loadSuccessful: function() {
-			if (this.moduleName && !Sheath.declaredModules[this.moduleName]) return false
-			
-			// We're good if we aren't loading a module (so sheath hanging isn't dependent on this file) or the module actually was declared.
-			this.onload && this.onload(data)
-			return true
-		},
-		
 		loaded: function() {
 			return typeof Sheath.requestedFiles[this.fileName] !== 'undefined'
+		},
+		
+		scriptSuccessful: function() {
+			if (this.onload) this.onload(null)
+			
+			if (Sheath.devMode && this.moduleName && !Sheath.declaredModules[this.moduleName]) {
+				console.warn('Sheath.js Warning: Module file successfully loaded, but module "' + this.moduleName + '" not found. Potential hang situation.')
+			}
 		}
 	}
-	
 	
 	/*
 		ClientLoader -- Implement asynchronous file loading for a browser environment.
@@ -514,15 +613,7 @@
 	}
 	ClientLoader.prototype = Object.create(Loader.prototype, Sheath.toPropertyDescriptors({
 		attachHandlers: function(loadable) {
-			loadable.onload = function(data) {
-				data = data && data.target && data.target.responseText
-				if (data) Sheath.requestedFiles[this.fileName] = data
-				if (this.loadSuccessful(data)) return
-				
-				if (Sheath.devMode) {
-					console.warn('Sheath.js Warning: Module file successfully loaded, but module "' + this.moduleName + '" not found. Potential hang situation.')
-				}
-			}.bind(this)
+			loadable.onload = this.loadSuccessful
 			
 			if (!Sheath.devMode) return
 			
@@ -597,14 +688,14 @@
 				if (Sheath.devMode) {
 					console.warn('Sheath.js Warning: Failed to find file "' + this.fileName + '" on the server. Potential hang situation.', err)
 				}
-				return
+				return this.onload && this.onload(err)
 			}
 			fileContents = fileContents.toString()
 			Sheath.requestedFiles[this.fileName] = fileContents
-			if (!this.isScript) return this.onload && this.onload(fileContents)
+			if (!this.isScript) return this.onload && this.onload(err, fileContents)
 			
 			ServerLoader.vm.runInContext(fileContents.toString(), ServerLoader.context)
-			if (this.onload) this.onload()
+			if (this.onload) this.onload(err)
 		}
 	}))
 
@@ -891,6 +982,21 @@
 	
 	
 	/*
+		sheath.load() -- Load a file. Behavior is different for .js files and non-.js files
+		
+	*/
+	sheath.load = function(fileName, onload, sync) {
+		if (typeof fileName !== 'string') {
+			throw new TypeError('Sheath.js Error - sheath.load() - File name must be a string. Received "' + typeof fileName + '".')
+		}
+		if (onload && typeof onload !== 'function') {
+			throw new TypeError('Sheath.js Error - sheath.load() - Callback must be a function, if specified. Received "' + typeof onload + '".')
+		}
+		Sheath.asyncLoaderFactory('', fileName, onload, sync)
+	}
+	
+	
+	/*
 		sheath.missing() -- Returns the names of all the modules the app is waiting on.
 		These are modules that have been listed as dependencies of other modules, but that haven't been declared yet.
 		Call this from the console when you suspect the app is hanging.
@@ -1010,7 +1116,7 @@
 		}
 		
 		// Call the factory to set up the modifier.
-		var mod = factory(Sheath.load.bind(Sheath))
+		var mod = factory()
 		
 		if (typeof mod !== 'object') {
 			throw new TypeError('Sheath.js Error - sheath.registerMod() - Mod factory must return an object. Received "' + typeof mod + '".')
@@ -1040,10 +1146,10 @@
 			throw new TypeError('Sheath.js Error: sheath.run() expects the deps to be a string or array of strings. Received "' + typeof deps + '".')
 		}
 		if (Sheath.configPhase) {
-			Sheath.initialModules.push({name: '', deps: deps, factory: func})
+			Sheath.initialModules.push({name: false, deps: deps, factory: func})
 			return
 		}
-		Sheath.moduleFactory('', deps, func)
+		Sheath.moduleFactory(false, deps, func)
 		return sheath // for chaining
 	}
 	
@@ -1097,9 +1203,9 @@
 
 	/*
 		sheath.lib() -- An easy way to encapsulate/incorporate third-party libraries.
-		An example of a modifier.
+		An example of an unprefixed modifier.
 	*/
-	sheath.registerMod('lib', function(load) {
+	sheath.registerMod('lib', function() {
 		var api = function(moduleName, globalName, fileName) {
 			if (typeof moduleName !== 'string') {
 				throw new TypeError('Sheath.js Error - sheath.lib() - Module name must be a string. Received "' + typeof moduleName + '".')
@@ -1128,7 +1234,7 @@
 		}
 		Lib.prototype = {
 			declare: function() {
-				sheath(this.name, [], this.factory.bind(this))
+				sheath(this.name, this.factory.bind(this))
 			},
 			
 			factory: function() {
@@ -1136,12 +1242,12 @@
 				if (!this.fileName || Sheath.global[this.globalName]) return this.onload()
 				
 				module.defer()
-				load(this.fileName, this.onload.bind(this, module), true)
+				sheath.load(this.fileName, this.onload.bind(this, module), true)
 			},
 			
-			onload: function(module) {
+			onload: function(module, err) {
 				var definition = Sheath.global[this.globalName] // grab the lib's api off the global scope
-				if (typeof definition === 'undefined' && Sheath.devMode) {
+				if (err || typeof definition === 'undefined' && Sheath.devMode) {
 					console.warn('Sheath.js Warning: Unable to create lib "' + this.name + '". Global property "' + this.globalName + '" not found. Make sure the library is loaded.')
 				}
 				// Account for sync and async resolution.
@@ -1149,8 +1255,69 @@
 			}
 		}
 		
+		var handle = function(name, resolve, previous) {
+			throw new Error('Sheath.js Error: The lib modifier does not support prefixed dependencies (e.g. "lib!MyLib"). Use sheath.lib() during the config phase to create a lib, then include it as an unprefixed dependency.')
+		}
+		
 		return {
-			api: api
+			api: api,
+			handle: handle
+		}
+	})
+
+
+	/*
+		sheath.text() -- An easy way to inject content as modules--e.g. for underscore/handlebars templating.
+		An example of a prefixed modifier.
+	*/
+	sheath.registerMod('text', function() {
+		var textModules = {}
+		var loading = {}
+		
+		var api = function(name, content) {
+			if (typeof name !== 'string') {
+				throw new TypeError('Sheath.js Error - sheath.text() - Name must be a string. Received "' + typeof name + '".')
+			}
+			if (typeof textModules[name] !== 'undefined') {
+				if (typeof content === 'undefined') return textModules[name]
+				throw new Error('Sheath.js Error - sheath.text() - A text module with name "' + name + '" already exists')
+			}
+			
+			resolve(name, content)
+		}
+		
+		var handle = function(name, resolve, previous) {
+			// Resolve immediately if we've already loaded this text module or a chained mod gave us a previous definition.
+			if (typeof previous !== 'undefined') return resolve(previous)
+			if (typeof textModules[name] !== 'undefined')  return resolve(textModules[name])
+			
+			// If we've already requested this text module, add this resolver to that module's resolver list.
+			if (loading[name]) return loading[name].push(resolve)
+			
+			loading[name] = [resolve]
+			sheath.load(name, onload.bind(null, name))
+		}
+		
+		var onload = function(name, err, content) {
+			if (typeof textModules[name] !== 'undefined') return // the text module was defined in the .js file
+			if (typeof content !== 'undefined') return resolve(name, content)
+		}
+		
+		var resolve = function(name, content) {
+			textModules[name] = content
+			
+			var resolverList = loading[name]
+			if (!resolverList || !resolverList.length) return // nothing to resolve
+			
+			while (resolverList.length) {
+				resolverList.shift()(content)
+			}
+			loading[name] = undefined
+		}
+		
+		return {
+			api: api,
+			handle: handle
 		}
 	})
 

@@ -17,14 +17,6 @@ describe('sheath.lib()', () => {
 		expect(sheath.lib.bind(null, 'lib1', 'lib1Ident', {})).toThrowError(/file name must be a string/i)
 	})
 	
-	it('asserts that the moduleName does not start with the separator', () => {
-		return new Promise(resolve => {
-			sheath.run(resolve)
-		}).then(result => {
-			expect(sheath.lib.bind(null, '/invalid')).toThrowError(/cannot start with the separator/i)
-		})
-	})
-	
 	it('asserts that the moduleName does not start with "."', () => {
 		return new Promise(resolve => {
 			sheath.run(resolve)
@@ -33,11 +25,27 @@ describe('sheath.lib()', () => {
 		})
 	})
 	
+	it('asserts that the moduleName does not start ore end with the separator', () => {
+		return new Promise(resolve => {
+			sheath.run(resolve)
+		}).then(result => {
+			expect(sheath.lib.bind(null, '/invalid')).toThrowError(/cannot start or end with the separator/i)
+		})
+	})
+	
 	it('asserts that the moduleName does not contain the accessor', () => {
 		return new Promise(resolve => {
 			sheath.run(resolve)
 		}).then(result => {
 			expect(sheath.lib.bind(null, 'invalid.module')).toThrowError(/cannot contain the accessor/i)
+		})
+	})
+	
+	it('asserts that the module name does not contain the mod pipe', () => {
+		return new Promise(resolve => {
+			sheath.run(resolve)
+		}).then(result => {
+			expect(sheath.lib.bind(null, 'invalid!module')).toThrowError(/cannot contain the mod pipe/i)
 		})
 	})
 	
@@ -90,5 +98,9 @@ describe('sheath.lib()', () => {
 	
 	it('cannot declare the same lib twice', () => {
 		expect(sheath.lib.bind(null, 'lib1')).toThrowError(/multiple modules.*same name/i)
+	})
+	
+	it('does not provide a handler for lib! modules', () => {
+		expect(sheath.run.bind(null, 'lib!SomeLib', () => {})).toThrowError(/does not support prefixed dependencies/i)
 	})
 })
