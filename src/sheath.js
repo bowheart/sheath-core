@@ -20,6 +20,7 @@
 	var Sheath = {
 		ACCESSOR: '.',
 		MOD_PIPE: '!',
+		SEPARATOR: '/',
 		URL_REGEX: /\/|\./,
 		
 		asyncEnabled: true, // async is enabled by default
@@ -33,7 +34,6 @@
 		phase: 'config', // Sheath begins in Config Phase. The two other phases will come in once all initial scripts are loaded
 		requestedFiles: {}, // the filenames we've sent off requests for; catches duplicate requests; maps file names to content returned
 		requestedModules: {}, // the modules we've sent off requests for; catches duplicate requests; maps module names to file names
-		separator: '/', // by default, a slash indicates a submodule
 		tasks: [],
 		
 		addDeclaredModule: function(module) {
@@ -253,7 +253,7 @@
 				throw new Error('Sheath.js Error: Module "' + moduleName + '" has an empty dependency ("' + oldName + '"). You must specify a name for the dependency.')
 			}
 			
-			var sep = this.separator
+			var sep = this.SEPARATOR
 			if (newName.slice(-sep.length) === sep) {
 				throw new Error('Sheath.js Error: Module "' + moduleName + '" has an invalid dependency ("' + oldName + '"). Dependencies cannot end with the separator ("' + sep + '").')
 			}
@@ -277,7 +277,7 @@
 				throw new Error('Sheath.js Error: Module names cannot be relative (start with "."). The culprit: "' + name + '"')
 			}
 			
-			var sep = this.separator
+			var sep = this.SEPARATOR
 			if (sep && (name.slice(0, sep.length) === sep || name.slice(-sep.length) === sep)) {
 				throw new Error('Sheath.js Error: Module names cannot start or end with the separator ("' + sep + '"). The culprit: "' + name + '"')
 			}
@@ -401,7 +401,7 @@
 		
 		parseImport: function(dep) {
 			var name = dep.name,
-				sep = Sheath.separator,
+				sep = Sheath.SEPARATOR,
 				acc = Sheath.ACCESSOR
 			
 			if (!acc) return {name: name} // fragments are disabled if the Accessor is set to ''
@@ -429,7 +429,7 @@
 		},
 		
 		parseRelativeDep: function(name) {
-			var sep = Sheath.separator
+			var sep = Sheath.SEPARATOR
 			
 			if (!sep) return name // relative paths are disabled if the Separator is set to ''
 			
@@ -863,22 +863,6 @@
 			default:
 				throw new ReferenceError('Sheath.js Error: "' + val + '" is not a valid mode. Valid modes are "production", "dev", and "analyze"')
 		}
-		return sheath.config // for chaining
-	}
-	
-	
-	/*
-		sheath.config.separator() -- A getter/setter for Sheath.separator -- the char sequence used to delineate a submodule.
-	*/
-	sheath.config.separator = function(sep) {
-		if (typeof sep === 'undefined') return Sheath.separator
-		if (!Sheath.configPhase) {
-			throw new Error('Sheath.js Error: accessor can only be set in the config phase.')
-		}
-		if (typeof sep !== 'string') throw new TypeError('Sheath.js Error: separator must be a string. Received "' + typeof sep + '".')
-		if (sep === Sheath.ACCESSOR) throw new Error('Sheath.js Error: Separator and accessor cannot be the same.')
-		
-		Sheath.separator = sep
 		return sheath.config // for chaining
 	}
 
