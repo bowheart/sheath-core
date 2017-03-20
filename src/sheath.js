@@ -18,10 +18,10 @@
 		[declaration received] -> [added to 'declaredModules' list] -> [dependencies defined] -> [definitionFunction called] -> [added to 'definedModules' list]
 	*/
 	var Sheath = {
+		ACCESSOR: '.',
 		MOD_PIPE: '!',
 		URL_REGEX: /\/|\./,
 		
-		accessor: '.', // by default, a period accesses a module fragment
 		asyncEnabled: true, // async is enabled by default
 		constants: {},
 		declaredModules: {}, // keeps track of all module declarations we've encountered throughout the lifetime of this app
@@ -88,7 +88,7 @@
 			if (!result) return
 
 			modules.push(modules[0])
-			console.warn('Sheath.js Warning: Circular dependency detected.\n\n    {' + modules.join('} -> {') + '}')
+			console.warn('Sheath.js Warning: Circular dependency detected.\n\n    "' + modules.join('" -> "') + '"')
 		},
 
 		declareInitialModules: function() {
@@ -282,7 +282,7 @@
 				throw new Error('Sheath.js Error: Module names cannot start or end with the separator ("' + sep + '"). The culprit: "' + name + '"')
 			}
 			
-			var acc = this.accessor
+			var acc = this.ACCESSOR
 			if (acc && ~name.indexOf(acc)) {
 				throw new Error('Sheath.js Error: Module names cannot contain the accessor ("' + acc + '"). The culprit: "' + name + '"')
 			}
@@ -402,7 +402,7 @@
 		parseImport: function(dep) {
 			var name = dep.name,
 				sep = Sheath.separator,
-				acc = Sheath.accessor
+				acc = Sheath.ACCESSOR
 			
 			if (!acc) return {name: name} // fragments are disabled if the Accessor is set to ''
 			
@@ -761,22 +761,6 @@
 		})
 		return sheath.config
 	}
-	
-	
-	/*
-		sheath.config.accessor() -- A getter/setter for Sheath.accessor -- the char sequence used to access a module fragment.
-	*/
-	sheath.config.accessor = function(accessor) {
-		if (typeof accessor === 'undefined') return Sheath.accessor
-		if (!Sheath.configPhase) {
-			throw new Error('Sheath.js Error: accessor can only be set in the config phase.')
-		}
-		if (typeof accessor !== 'string') throw new TypeError('Sheath.js Error: accessor must be a string')
-		if (accessor === Sheath.separator) throw new Error('Sheath.js Error: Accessor and separator cannot be the same.')
-		
-		Sheath.accessor = accessor
-		return sheath.config // for chaining
-	}
 
 
 	/*
@@ -892,7 +876,7 @@
 			throw new Error('Sheath.js Error: accessor can only be set in the config phase.')
 		}
 		if (typeof sep !== 'string') throw new TypeError('Sheath.js Error: separator must be a string. Received "' + typeof sep + '".')
-		if (sep === Sheath.accessor) throw new Error('Sheath.js Error: Separator and accessor cannot be the same.')
+		if (sep === Sheath.ACCESSOR) throw new Error('Sheath.js Error: Separator and accessor cannot be the same.')
 		
 		Sheath.separator = sep
 		return sheath.config // for chaining
