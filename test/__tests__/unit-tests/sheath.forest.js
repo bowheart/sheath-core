@@ -62,10 +62,6 @@ describe('sheath.forest()', () => {
 		expect(forest.app3[3]).toBe('app3')
 	})
 	
-	it('asserts that moduleName is a string, if specified', () => {
-		expect(sheath.forest.bind(null, () => {})).toThrowError(/expects.*a string/i)
-	})
-	
 	it('finds the load-order-optimized tree of a given module', () => {
 		let tree = sheath.forest('dependency4')
 		expect(tree[0]).toBe('dependency4/b')
