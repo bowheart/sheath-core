@@ -5,12 +5,6 @@ const sheath = require('../../../src/sheath')
 
 
 describe('sheath.current()', () => {
-	it('logs a warning when called outside a module definition', () => {
-		console.warn = jest.fn()
-		sheath.current()
-		expect(console.warn).toHaveBeenCalled()
-	})
-	
 	it('returns the moduleInterface of the module currently being defined', () => {
 		return new Promise(resolve => {
 			sheath('module1', () => {

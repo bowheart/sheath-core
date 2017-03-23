@@ -6,7 +6,7 @@ const sheath = require('../../../src/sheath')
 
 describe('sheath.config()', () => {
 	it('asserts that the key is either a string or an object', () => {
-		expect(sheath.config.bind(null, ['invalid-type'])).toThrowError(/expects.*key.*an object/i)
+		expect(sheath.config.bind(null, ['invalid-type'])).toThrowError(/key.*string.*or.*object/i)
 	})
 	
 	it('asserts that the key is a valid config setting', () => {

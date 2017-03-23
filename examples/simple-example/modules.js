@@ -1,4 +1,5 @@
 // Setup
+sheath.const('start', performance.now())
 sheath.config.mode('dev')
 sheath.lib
 	('$', 'jQuery', 'https://ajax.googleapis.com/ajax/libs/jquery/3.1.0/jquery.min.js')
@@ -9,6 +10,8 @@ sheath.lib
 // Modules
 sheath('app', ['$', 'one', 'two', 'three', 'async-module'], function($, one, two, three, asyncModule) {
 	$('body').append([one, two, three].join('<br>'))
+	var end = performance.now()
+	console.log('load time: ' + (end - sheath.const('start')).toFixed(2) + ' milliseconds')
 })
 
 

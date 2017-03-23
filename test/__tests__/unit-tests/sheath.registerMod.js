@@ -7,7 +7,7 @@ const testMod = {api: 'the-api', handle: () => {}}
 
 describe('sheath.registerMod()', () => {
 	it('asserts that the modifier name is a string', () => {
-		expect(sheath.registerMod.bind(null, {})).toThrowError(/mod name must be a string/i)
+		expect(sheath.registerMod.bind(null, {})).toThrowError(/name must be a string/i)
 	})
 	
 	it('asserts that the modifier name does not conflict with anything else in the sheath namespace', () => {
@@ -19,11 +19,11 @@ describe('sheath.registerMod()', () => {
 	})
 	
 	it('asserts that the factory returns an object', () => {
-		expect(sheath.registerMod.bind(null, 'mod1', () => 'invalid')).toThrowError(/factory must return an object/i)
+		expect(sheath.registerMod.bind(null, 'mod1', () => 'invalid')).toThrowError(/factory.*failed.*an object/i)
 	})
 	
 	it('asserts that the mod object has an "api" property', () => {
-		expect(sheath.registerMod.bind(null, 'mod1', () => ({}))).toThrowError(/must have an api property/i)
+		expect(sheath.registerMod.bind(null, 'mod1', () => ({}))).toThrowError(/must have an "api" property/i)
 	})
 	
 	it('asserts that the mod object has a(n) "handle" function', () => {
@@ -39,7 +39,7 @@ describe('sheath.registerMod()', () => {
 		return new Promise(resolve => {
 			setTimeout(resolve)
 		}).then(result => {
-			expect(sheath.bind(null, 'module', 'badmod!badmodule', () => {})).toThrowError(/module.*is requesting an unregistered modifier/i)
+			expect(sheath.bind(null, 'module', 'badmod!badmodule', () => {})).toThrowError(/unregistered modifier.*used/i)
 		})
 	})
 })

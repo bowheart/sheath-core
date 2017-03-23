@@ -5,12 +5,204 @@
 (function(outside, factory) {
 	var serverSide = typeof module === 'object' && typeof module.exports === 'object',
 		sheath = factory(!serverSide)
-
+	
 	serverSide
 		? module.exports = sheath
 		: outside.sheath = sheath
 }(this, function(inBrowser) {
 	'use strict'
+	
+	/*
+		Assert -- Group all assertions into one place for easy re-use and removal for production builds of Sheath.
+	*/
+	var Assert = {
+		SPACE: / /,
+		_func: '',
+		
+		array: function(val, name) {
+			if (!Array.isArray(val)) this.error(TypeError, name, val, 'an array')
+		},
+		
+		configPhase: function() {
+			if (!Sheath.configPhase) this.error(Error, 'Setting can only be set during the Config Phase.')
+		},
+		
+		constNotDeclared: function(key) {
+			if (Sheath.constants[key]) this.error(Error, 'Const "' + key + '" is already defined. Overwrite disallowed.')
+		},
+		
+		// A simple Depth-First Search used to detect back edges (circular dependencies).
+		dfs: function(chain, currentModule) {
+			if (!currentModule) return false
+			if (currentModule.name === chain[0]) return true // back edge found
+			if (~chain.indexOf(currentModule.name)) return false // back edge found, but not involving target node; ignore
+			
+			chain.push(currentModule.name) // put the current module on there
+			var deps = currentModule.deps,
+				depsKeys = Object.keys(deps)
+			
+			for (var i = 0; i < depsKeys.length; i++) {
+				var result = this.dfs(chain, Sheath.declaredModules[deps[depsKeys[i]].name])
+				
+				if (result) return result
+			}
+			chain.pop() // not found down this chain; take the current module off of there and go back up
+			return false
+		},
+		
+		error: function(type, name, val, expectation) {
+			// Allow for custom messages:
+			var message = this.SPACE.test(name)
+				? name
+				: name + ' must be ' + expectation + '. Received "' + typeof val + '"'
+			
+			throw new type('Sheath.js Error - ' + this._func + ' - ' + message)
+		},
+		
+		falsy: function(val, name) {
+			if (val) this.error(Error, name, val, 'falsy')
+		},
+		
+		func: function(val, name) {
+			if (typeof val !== 'function') this.error(TypeError, name, val, 'a function')
+		},
+		
+		libLoaded: function(err, definition, libName, globalName) {
+			if (err || typeof definition === 'undefined' && Sheath.devMode) {
+				this.warn('Unable to create lib "' + libName + '". Global property "' + globalName + '" not found. Make sure the library is loaded.')
+			}
+		},
+		
+		loadNotFailed: function(loader, loadable) {
+			if (!Sheath.devMode) return // check only applicable in devMode
+			
+			loadable.onerror = function() {
+				var description = loader.moduleName ? 'module "' + loader.moduleName + '"' : 'file "' + loader.fileName + '"'
+				this.warn('Attempt to lazy-load ' + description + ' failed. Potential hang situation.')
+			}.bind(this)
+		},
+		
+		moduleFoundInFile: function(moduleName) {
+			if (Sheath.devMode && moduleName && !Sheath.declaredModules[moduleName]) {
+				this.warn('Module file successfully loaded, but module "' + moduleName + '" not found. Potential hang situation.')
+			}
+		},
+		
+		noCircularDeps: function(module) {
+			if (!Sheath.devMode || !Sheath.dependents[module.name].length) return
+			
+			// This module has been listed as a dependency of other modules; check for circular dependencies (devMode only).
+			var modules = [],
+				result = this.dfs(modules, module)
+			
+			if (!result) return
+			
+			modules.push(modules[0])
+			this.warn('Circular dependency detected.\n\n    "' + modules.join('" -> "') + '"')
+		},
+		
+		noNamespaceCollision: function(name) {
+			if (sheath[name]) this.error(Error, 'Mod name "' + name + '" already exists in the sheath namespace.')
+		},
+		
+		noUndeclaredModules: function(undeclaredModules) {
+			// This check only applies in devMode when async loading is disabled.
+			if (Sheath.devMode && !Sheath.asyncEnabled && undeclaredModules.length) {
+				this.warn('Lazy-loading is disabled, but the Sync Phase has ended and the following modules have not been declared:', Sheath.undeclaredModules(true))
+			}
+		},
+		
+		notADuplicateModuleName: function(name) {
+			if (Sheath.declaredModules[name]) this.setFunc('Duplicate Modules').error(Error, 'Multiple modules declared with name "' + name + '"')
+		},
+		
+		notConfigPhase: function() {
+			if (Sheath.configPhase) this.error(Error, 'This method cannot be called during the Config Phase. Use sheath.run() to defer execution.')
+		},
+		
+		object: function(val, name) {
+			if (Array.isArray(val) || typeof val !== 'object') this.error(TypeError, name, val, 'an object')
+		},
+		
+		set: function(val, name) {
+			if (typeof val === 'undefined') this.error(TypeError, name, val, 'set')
+		},
+		
+		setFunc: function(funcName) {
+			this._func = funcName
+			return this // for chaining
+		},
+		
+		string: function(val, name) {
+			if (typeof val !== 'string') this.error(TypeError, name, val, 'a string')
+		},
+		
+		task: function() {
+			if (!Sheath.tasks.length) this.warn('No module is currently being defined. Call to sheath.current() will return null.')
+		},
+		
+		truthy: function(val, name) {
+			if (!val) this.error(Error, name, val, 'truthy')
+		},
+		
+		validConfigSetting: function(val) {
+			if (!sheath.config[val]) this.setFunc('sheath.config()').error(ReferenceError, 'Invalid config setting "' + val + '"')
+		},
+		
+		validDepName: function(moduleName, oldName, newName) {
+			this.setFunc('Invalid Dependency "' + oldName + '"')
+			this.truthy(newName, 'Dependencies cannot be empty')
+			
+			var sep = Sheath.SEPARATOR
+			if (newName.slice(-sep.length) === sep) {
+				this.error(Error, 'Dependency names cannot end with "' + sep + '"')
+			}
+		},
+		
+		validMode: function(val) {
+			if (!~['production', 'dev', 'analyze'].indexOf(val)) this.error(Error, 'Invalid mode "' + val + '". Valid modes are "production", "dev", and "analyze"')
+		},
+		
+		validMods: function(moduleName, mods) {
+			this.setFunc('Module "' + moduleName + '"')
+			for (var i = 0; i < mods.length; i++) {
+				if (!Sheath.mods[mods[i]]) this.error(ReferenceError, 'Unregistered modifier "' + mods[i] + '" used. Make sure the mod is loaded during the config phase.')
+			}
+		},
+		
+		validModuleName: function(name) {
+			if (name === false) return // a NamelessModule; ignore
+			
+			this.setFunc('Invalid Module Name')
+			this.truthy(name, 'Module names cannot be empty')
+			
+			var culprit = '. The culprit: "' + name + '"'
+			if (name[0] === '.') {
+				this.error(Error, 'Module names cannot be relative (they can\'t start with ".")' + culprit)
+			}
+			
+			var sep = Sheath.SEPARATOR
+			if (sep && (name.slice(0, sep.length) === sep || name.slice(-sep.length) === sep)) {
+				this.error(Error, 'Module names cannot start or end with "' + sep + '"' + culprit)
+			}
+			
+			var acc = Sheath.ACCESSOR
+			if (acc && ~name.indexOf(acc)) {
+				this.error(Error, 'Module names cannot contain "' + acc + '"' + culprit)
+			}
+			
+			var pipe = Sheath.MOD_PIPE
+			if (~name.indexOf(pipe)) {
+				this.error(Error, 'Module names cannot contain the mod pipe ("' + pipe + '")' + culprit)
+			}
+		},
+		
+		warn: function(message) {
+			if (!Sheath.devMode) return // warnings only available in devMode
+			console.warn('Sheath.js Warning: ' + message)
+		}
+	}
+	
 	
 	/*
 		Sheath -- A private utility for keeping track of/manipulating modules.
@@ -37,20 +229,18 @@
 		tasks: [],
 		
 		addDeclaredModule: function(module) {
-			if (this.declaredModules[module.name]) throw new Error('Sheath.js Error: Multiple modules with the same name found. Name: "' + module.name + '"')
+			Assert.notADuplicateModuleName(module.name)
 			this.declaredModules[module.name] = module
-
+			
 			if (!this.dependents[module.name]) this.dependents[module.name] = []
-			if (this.devMode && this.dependents[module.name].length) {
-				this.checkCircularDep(module) // this module has been listed as a dependency of other modules; check for circular dependencies (devMode only)
-			}
+			Assert.noCircularDeps(module)
 		},
-
+		
 		addDefinedModule: function(module) {
 			this.definedModules[module.name] = module
-
+			
 			if (!this.dependents[module.name]) return // nothing more to do
-
+			
 			// Resolve all dependencies met by this module.
 			var dependents = this.dependents[module.name]
 			for (var i = 0; i < dependents.length; i++) {
@@ -58,11 +248,11 @@
 				dependent.resolveDep(module)
 			}
 		},
-
+		
 		addDependent: function(module, depName) {
 			if (!this.dependents[depName]) this.dependents[depName] = []
 			this.dependents[depName].push(module)
-
+			
 			// If the dep is already met, check it off the module's list.
 			if (this.definedModules[depName]) module.readyDeps.push(this.definedModules[depName])
 		},
@@ -71,7 +261,7 @@
 			var loader = new (inBrowser ? ClientLoader : ServerLoader)(moduleName, fileName, onload, sync)
 			loader.load()
 		},
-
+		
 		/*
 			asyncResolver() -- takes a module's name and returns the filename--the `src` attribute of an async <script> tag to request this module.
 			This is just the default! It is meant to be overridden using sheath.config.asyncResolver() (below).
@@ -80,69 +270,43 @@
 			// The default async filename resolver just assumes that the module name is the filepath minus the '.js' extension.
 			return module + '.js'
 		},
-
-		checkCircularDep: function(module) {
-			var modules = [],
-				result = this.dfs(modules, module)
-
-			if (!result) return
-
-			modules.push(modules[0])
-			console.warn('Sheath.js Warning: Circular dependency detected.\n\n    "' + modules.join('" -> "') + '"')
-		},
-
+		
 		declareInitialModules: function() {
 			for (var i = 0; i < this.initialModules.length; i++) {
 				var module = this.initialModules[i]
 				this.moduleFactory(module.name, module.deps, module.factory)
 			}
 		},
-
+		
 		defineConst: function(key, val) {
-			if (this.constants[key]) throw new Error('Sheath.js Error: Const "' + key + '" is already defined. Overwrite disallowed.')
+			Assert.constNotDeclared(key)
 			this.constants[key] = val
 		},
-
-		// A simple Depth-First Search used to detect back edges (circular dependencies).
-		dfs: function(chain, currentModule) {
-			if (!currentModule) return false
-			if (currentModule.name === chain[0]) return true // back edge found
-			if (~chain.indexOf(currentModule.name)) return false // back edge found, but not involving target node; ignore
-
-			chain.push(currentModule.name) // put the current module on there
-			var deps = currentModule.deps,
-				depsKeys = Object.keys(deps)
-
-			for (var i = 0; i < depsKeys.length; i++) {
-				var result = this.dfs(chain, this.declaredModules[deps[depsKeys[i]].name])
-
-				if (result) return result
-			}
-			chain.pop() // not found down this chain; take the current module off of there and go back up
-			return false
-		},
-
+		
 		extend: function(a, b) {
 			Object.keys(b).forEach(function(key) {
 				a[key] = b[key]
 			})
 			return a
 		},
-
+		
 		incorporateMod: function(name, mod) {
-			if (!mod.api) throw new TypeError('Sheath.js Error: Mod "' + name + '" must have an api property.')
-			if (typeof mod.handle !== 'function') {
-				throw new TypeError('Sheath.js Error: Mod "' + name + '" must have a "handle" function.')
-			}
+			Assert.setFunc('Mod "' + mod.name + '"')
+			Assert.set(mod.api, 'All mods must have an "api" property.')
+			Assert.func(mod.handle, 'All mods must have a "handle" function.')
 			
 			sheath[name] = mod.api // stick the mod's api in the sheath namespace
 			this.mods[name] = mod.handle
 		},
-
+		
 		isUrl: function(str) {
 			return str && typeof str === 'string' && this.URL_REGEX.test(str)
 		},
-
+		
+		link: function(name, deps, factory) {
+			
+		},
+		
 		/*
 			loadAsync() -- For each 'names', finds the module's filename and:
 			In the browser: Creates a <script> tag (if one hasn't been created).
@@ -150,13 +314,13 @@
 		*/
 		loadAsync: function(names) {
 			if (!this.asyncPhase || !this.asyncEnabled) return // lazy-loading is disabled
-
+			
 			for (var i = 0; i < names.length; i++) {
 				var name = names[i]
 				if (this.declaredModules[name] || typeof this.requestedModules[name] !== 'undefined') {
 					continue // this module has already been declared or we've already tried loading it
 				}
-
+				
 				var filename = this.asyncResolver(name)
 				this.requestedModules[name] = filename || ''
 				if (!filename) continue // no file found for this module
@@ -166,7 +330,7 @@
 		},
 		
 		moduleFactory: function(name, deps, factory) {
-			this.validateModuleName(name)
+			Assert.validModuleName(name)
 			var newModule = new (name ? Module : NamelessModule)(name, deps, factory)
 			newModule.declare()
 			newModule.define() // attempt to define this module synchronously, in case there are no deps
@@ -185,15 +349,15 @@
 			newModule.declare()
 			newModule.applyMods()
 		},
-
+		
 		taskEnd: function() {
 			this.tasks.pop()
 		},
-
+		
 		taskStart: function(task) {
 			this.tasks.push(task)
 		},
-
+		
 		toPhase: function(phase) {
 			this.phase = phase
 			if (phase === 'sync') {
@@ -202,9 +366,7 @@
 			}
 			// async phase
 			var undeclaredModules = this.undeclaredModules()
-			if (this.devMode && !this.asyncEnabled && undeclaredModules.length) {
-				console.warn('Sheath.js Warning: Lazy-loading disabled. Sync Phase ended and undeclared modules found. Modules:', this.undeclaredModules(true))
-			}
+			Assert.noUndeclaredModules(undeclaredModules)
 			this.loadAsync(undeclaredModules)
 		},
 		
@@ -246,52 +408,6 @@
 					dependents: self.dependents[moduleName].map(function(module) { return module.name })
 				}
 			})
-		},
-		
-		validateDepName: function(moduleName, oldName, newName) {
-			if (!newName) {
-				throw new Error('Sheath.js Error: Module "' + moduleName + '" has an empty dependency ("' + oldName + '"). You must specify a name for the dependency.')
-			}
-			
-			var sep = this.SEPARATOR
-			if (newName.slice(-sep.length) === sep) {
-				throw new Error('Sheath.js Error: Module "' + moduleName + '" has an invalid dependency ("' + oldName + '"). Dependencies cannot end with "' + sep + '".')
-			}
-		},
-		
-		validateMods: function(moduleName, mods) {
-			for (var i = 0; i < mods.length; i++) {
-				if (this.mods[mods[i]]) continue
-				
-				throw new Error('Sheath.js Error: Dependency for module "' + moduleName + '" is requesting an unregistered modifier "' + mods[i] + '". Make sure the mod is loaded during the config phase.')
-			}
-		},
-		
-		validateModuleName: function(name) {
-			if (name === false) return // a NamelessModule; ignore
-			
-			if (!name) {
-				throw new Error('Sheath.js Error: Module names cannot be empty')
-			}
-			var culprit = '. The culprit: "' + name + '"'
-			if (name[0] === '.') {
-				throw new Error('Sheath.js Error: Module names cannot be relative (start with ".")' + culprit)
-			}
-			
-			var sep = this.SEPARATOR
-			if (sep && (name.slice(0, sep.length) === sep || name.slice(-sep.length) === sep)) {
-				throw new Error('Sheath.js Error: Module names cannot start or end with "' + sep + '"' + culprit)
-			}
-			
-			var acc = this.ACCESSOR
-			if (acc && ~name.indexOf(acc)) {
-				throw new Error('Sheath.js Error: Module names cannot contain "' + acc + '"' + culprit)
-			}
-			
-			var pipe = this.MOD_PIPE
-			if (~name.indexOf(pipe)) {
-				throw new Error('Sheath.js Error: Module names cannot contain the mod pipe ("' + pipe + '")' + culprit)
-			}
 		},
 		
 		get devMode() { return this.mode === 'dev' || this.mode === 'analyze' },
@@ -349,7 +465,7 @@
 		},
 		
 		defer: function() {
-			if (this.defined) throw new Error('Sheath.js Error: Module.defer() must be called during the synchronous execution of the module factory')
+			Assert.setFunc('Module.defer()').falsy(this.defined, 'This method must be called during the synchronous execution of the module factory.')
 			this.deferring = true
 			return this.interface // for chaining
 		},
@@ -372,7 +488,7 @@
 			var dep = this.parseMods(name)
 			dep.rawName = this.parseRelativeDep(dep.name) // the rawName is the name with relative paths resolved and no mods prefixed
 			dep.name = dep.modsStr + dep.rawName // the name is the rawName with mods prefixed
-			if (!dep.mods.length) this.parseImport(dep) // imports only apply to internal modules; let the mod handle all other characters
+			if (!dep.mods.length) this.parseImport(dep) // imports only apply to internal modules; if there are mods, let them handle the other characters
 			return dep
 		},
 
@@ -383,12 +499,14 @@
 			
 			for (var i = 0; i < this.deps.length; i++) {
 				var depName = this.deps[i]
-				if (typeof depName !== 'string') {
-					throw new TypeError('Sheath.js Error: All module dependencies must be strings. Received "' + typeof depName + '".')
-				}
+				
+				Assert.setFunc('Invalid dependency "' + depName + '" for module "' + this.name + '"')
+				Assert.string(depName, 'Module dependencies must be strings.')
 				
 				var mappedDep = this.mapDep(depName)
 				mappedDep.index = i
+				
+				Assert.falsy(mappedDeps[mappedDep.name], 'Duplicate dependency detected.')
 				
 				rawDeps.push(mappedDep.name)
 				Sheath.addDependent(this, mappedDep.name)
@@ -417,8 +535,8 @@
 				mods = name.split(pipe),
 				newName = mods.pop()
 			
-			Sheath.validateDepName(this.name, name, newName)
-			if (mods.length) Sheath.validateMods(this.name, mods)
+			Assert.validDepName(this.name, name, newName)
+			if (mods.length) Assert.validMods(this.name, mods)
 			
 			return {
 				name: newName,
@@ -596,9 +714,7 @@
 		scriptSuccessful: function() {
 			if (this.onload) this.onload(null)
 			
-			if (Sheath.devMode && this.moduleName && !Sheath.declaredModules[this.moduleName]) {
-				console.warn('Sheath.js Warning: Module file successfully loaded, but module "' + this.moduleName + '" not found. Potential hang situation.')
-			}
+			Assert.moduleFoundInFile(this.moduleName)
 		}
 	}
 	
@@ -611,13 +727,7 @@
 	ClientLoader.prototype = Object.create(Loader.prototype, Sheath.toPropertyDescriptors({
 		attachHandlers: function(loadable) {
 			loadable.onload = this.loadSuccessful
-			
-			if (!Sheath.devMode) return
-			
-			loadable.onerror = function() {
-				var description = this.moduleName ? 'module "' + this.moduleName + '"' : 'file "' + this.fileName + '"'
-				console.warn('Sheath.js Warning: Attempt to lazy-load ' + description + ' failed. Potential hang situation.')
-			}.bind(this)
+			Assert.loadNotFailed(this, loadable)
 		},
 		
 		implementLoad: function() {
@@ -682,9 +792,7 @@
 		
 		loadComplete: function(err, fileContents) {
 			if (err) {
-				if (Sheath.devMode) {
-					console.warn('Sheath.js Warning: Failed to find file "' + this.fileName + '" on the server. Potential hang situation.', err)
-				}
+				Assert.warn('Failed to find file "' + this.fileName + '" on the server. Potential hang situation.')
 				return this.onload && this.onload(err)
 			}
 			fileContents = fileContents.toString()
@@ -719,16 +827,12 @@
 			factory = deps
 			deps = []
 		}
-		if (typeof name !== 'string') {
-			throw new TypeError('Sheath.js Error - sheath() - Name must be a string. Received "' + typeof name + '".')
-		}
-		if (typeof factory !== 'function') {
-			throw new TypeError('Sheath.js Error - sheath() - Factory must be a function. Received "' + typeof factory + '".')
-		}
+		Assert.setFunc('sheath()')
+		Assert.string(name, 'Name')
+		Assert.func(factory, 'Factory')
 		if (typeof deps === 'string') deps = [deps] // if 'deps' is a string, make it the only dependency
-		if (!Array.isArray(deps)) {
-			throw new TypeError('Sheath.js Error - sheath() - If specified, deps must be a string or array of strings. Received "' + typeof deps + '".')
-		}
+		Assert.array(deps, 'If specified, deps must be a string or array of strings.')
+		
 		if (Sheath.configPhase) {
 			Sheath.initialModules.push({name: name, deps: deps, factory: factory})
 			return sheath // for chaining
@@ -744,16 +848,15 @@
 		All config methods return sheath.config for chaining.
 	*/
 	sheath.config = function(key, val) {
+		Assert.setFunc('sheath.config()')
 		if (typeof key === 'string') {
-			if (!sheath.config[key]) throw new ReferenceError('Sheath.js Error: Invalid config setting "' + key + '" passed to sheath.config()')
+			Assert.validConfigSetting(key)
 			return sheath.config[key](val)
 		}
-		if (Array.isArray(key) || typeof key !== 'object') {
-			throw new TypeError('Sheath.js Error: sheath.config() expects a key, key-value pair, or an object. Received "' + typeof key + '".')
-		}
+		Assert.object(key, 'Key must be a string or an object of [config setting]->[value] pairs.')
 		
 		Object.keys(key).forEach(function(prop) {
-			if (!sheath.config[prop]) throw new ReferenceError('Sheath.js Error: Invalid config setting "' + prop + '" passed to sheath.config()')
+			Assert.validConfigSetting(prop)
 			sheath.config[prop](key[prop])
 		})
 		return sheath.config
@@ -767,7 +870,7 @@
 	*/
 	sheath.config.async = function(val) {
 		if (typeof val === 'undefined') return Sheath.asyncEnabled
-		if (!Sheath.configPhase) throw new Error('Sheath.js Error: lazy-loading can only enabled/disabled in the Config Phase.')
+		Assert.setFunc('sheath.config.async()').configPhase()
 
 		Sheath.asyncEnabled = Boolean(val)
 		return sheath.config // for chaining
@@ -779,8 +882,9 @@
 	*/
 	sheath.config.asyncResolver = function(newResolver) {
 		if (!newResolver) return Sheath.asyncResolver
-		if (!Sheath.configPhase) throw new Error('Sheath.js Error: asyncResolver can only be set in the config phase.')
-		if (typeof newResolver !== 'function') throw new TypeError('Sheath.js Error: Custom asyncResolver must be a function')
+		Assert.setFunc('sheath.config.asyncResolver()')
+		Assert.configPhase()
+		Assert.func(newResolver, 'asyncResolver')
 
 		Sheath.asyncResolver = newResolver
 		return sheath.config // for chaining
@@ -793,12 +897,9 @@
 	sheath.config.baseModel = function(baseModel) {
 		if (typeof baseModel === 'undefined') return Sheath.baseModel
 
-		if (!Sheath.configPhase) {
-			throw new Error('Sheath.js Error: baseModel can only be set in the config phase.')
-		}
-		if (typeof baseModel !== 'object') {
-			throw new TypeError('Sheath.js Error: baseModel must be an object or null. Found "' + typeof baseModel + '"')
-		}
+		Assert.setFunc('sheath.config.baseModel()').configPhase()
+		Assert.object(baseModel, 'Base model must be an object or null.')
+		
 		if (baseModel === null) {
 			Sheath.baseModel = null
 			return sheath
@@ -818,12 +919,8 @@
 	sheath.config.baseObject = function(baseObject) {
 		if (typeof baseObject === 'undefined') return Sheath.baseObject
 
-		if (!Sheath.configPhase) {
-			throw new Error('Sheath.js Error: baseObject can only be set in the config phase.')
-		}
-		if (typeof baseObject !== 'object') {
-			throw new TypeError('Sheath.js Error: baseObject must be an object or null. Found "' + typeof baseObject + '"')
-		}
+		Assert.setFunc('sheath.config.baseObject()').configPhase()
+		Assert.object(baseObject, 'Base object must be an object or null.')
 
 		Sheath.baseObject = baseObject
 		return sheath.config // for chaining
@@ -837,9 +934,8 @@
 	*/
 	sheath.config.emulateBrowser = function(val) {
 		if (typeof val === 'undefined') return inBrowser
-		if (!Sheath.configPhase) {
-			throw new Error('Sheath.js Error: Browser emulation can only be modified during the config phase.')
-		}
+		Assert.setFunc('sheath.config.emulateBrowser()').configPhase()
+		
 		inBrowser = Boolean(val)
 		return sheath.config // for chaining
 	}
@@ -850,16 +946,11 @@
 	*/
 	sheath.config.mode = function(val) {
 		if (typeof val === 'undefined') return Sheath.mode
-		if (!Sheath.configPhase) {
-			throw new Error('Sheath.js Error: mode can only be set in the config phase.')
-		}
-		switch (val) {
-			case 'dev': case 'analyze': case 'production':
-				Sheath.mode = val
-				break
-			default:
-				throw new ReferenceError('Sheath.js Error: "' + val + '" is not a valid mode. Valid modes are "production", "dev", and "analyze"')
-		}
+		
+		Assert.setFunc('sheath.config.mode()').configPhase()
+		Assert.validMode(val)
+		
+		Sheath.mode = val
 		return sheath.config // for chaining
 	}
 
@@ -875,7 +966,7 @@
 			Sheath.defineConst(key, val)
 			return sheath // for chaining
 		}
-		if (typeof key !== 'object') throw new TypeError('Sheath.js Error: sheath.const() expects either a key and a value, or an object. Received: "' + typeof key + '"')
+		Assert.setFunc('sheath.const()').object(key, 'Please specify a single key and value or an object of key-value pairs.')
 		Object.keys(key).forEach(function(prop) {
 			Sheath.defineConst(prop, key[prop])
 		})
@@ -887,11 +978,8 @@
 		sheath.current() -- Get the name of the module currently being defined. Use to reduce duplication.
 	*/
 	sheath.current = function() {
-		if (!Sheath.tasks.length) {
-			console.warn('Sheath.js Warning: No module is currently being defined. Call to sheath.current() will return null.')
-			return null
-		}
-		return Sheath.tasks[Sheath.tasks.length - 1].interface
+		Assert.task()
+		return Sheath.tasks.length ? Sheath.tasks[Sheath.tasks.length - 1].interface : null
 	}
 
 
@@ -913,10 +1001,7 @@
 		If no moduleName is passed, find all trees of all app-level modules (modules that have no dependents).
 	*/
 	sheath.forest = function(moduleName) {
-		if (moduleName) {
-			if (typeof moduleName !== 'string') {
-				throw new TypeError('Sheath.js Error: sheath.forest() expects moduleName to be a string, if specified. Received "' + typeof moduleName + '"')
-			}
+		if (typeof moduleName === 'string') {
 			if (!Sheath.declaredModules[moduleName]) return []
 			return Sheath.tree(moduleName, [])
 		}
@@ -951,12 +1036,10 @@
 		
 	*/
 	sheath.load = function(fileName, onload, sync) {
-		if (typeof fileName !== 'string') {
-			throw new TypeError('Sheath.js Error - sheath.load() - File name must be a string. Received "' + typeof fileName + '".')
-		}
-		if (onload && typeof onload !== 'function') {
-			throw new TypeError('Sheath.js Error - sheath.load() - Callback must be a function, if specified. Received "' + typeof onload + '".')
-		}
+		Assert.setFunc('sheath.load()')
+		Assert.string(fileName, 'Filename')
+		if (onload) Assert.func(onload, 'Callback')
+		
 		Sheath.asyncLoaderFactory('', fileName, onload, sync)
 	}
 	
@@ -981,10 +1064,8 @@
 	*/
 	sheath.model = function(parent, model) {
 		// sheath.instance() uses sheath.model() internally. Find which one the user called for better error reporting.
-		var funcName = sheath.instance.active ? 'sheath.instance()' : 'sheath.model()'
-		if (Sheath.configPhase) {
-			throw new Error('Sheath.js Error: ' + funcName + ' cannot be called during the config phase. Use sheath.run() to defer execution.')
-		}
+		Assert.setFunc(sheath.instance.active ? 'sheath.instance()' : 'sheath.model()')
+		Assert.notConfigPhase()
 
 		// Arg swapping -- 'parent' is optional; if 'model' doesn't exist, move it down.
 		if (!model) {
@@ -992,20 +1073,10 @@
 			parent = Sheath.baseModel
 		}
 
-		// Make sure the model param is valid.
-		if (typeof model !== 'object') {
-			throw new TypeError('Sheath.js Error: ' + funcName + ' expects the model to be an object. Received "' + typeof model + '".')
-		}
-
-		// Make sure the parent param is valid, if it was given.
-		if (parent && typeof parent !== 'function') {
-			throw new TypeError('Sheath.js Error: ' + funcName + ' expects the parent to be a constructor function. Received "' + typeof parent + '".')
-		}
-
-		// Make sure the init property is valid, if it was given.
-		if (model.init && typeof model.init !== 'function') {
-			throw new TypeError('Sheath.js Error: ' + funcName + ' expects model "init" property to be a function. Received "' + typeof model.init + '".')
-		}
+		// Make sure model, parent (if given), and model.init (if given) are valid.
+		Assert.object(model, 'Model')
+		if (parent) Assert.func(parent, 'Parent')
+		if (model.init) Assert.func(model.init, 'Model "init" property must be a function.')
 
 		// Set up the constructor. This will auto-call the `init` method, if one exists anywhere on the prototype chain.
 		var constructor = function Model() {
@@ -1028,7 +1099,8 @@
 			object : object -- optional -- (Required if parent is specified) The new object you want created.
 	*/
 	sheath.object = function(parent, object) {
-		if (Sheath.configPhase) throw new Error('Sheath.js Error: sheath.model() cannot be called during the config phase. Use sheath.run() to defer execution.')
+		Assert.setFunc('sheath.object()')
+		Assert.notConfigPhase()
 
 		// Arg swapping -- 'parent' is optional; if 'object' doesn't exist, move it down.
 		if (!object) {
@@ -1036,13 +1108,9 @@
 			parent = Sheath.baseObject
 		}
 
-		// Make sure the object param is valid.
-		if (typeof object !== 'object') throw new TypeError('sheath.object() error: object must be an object')
-
-		// Make sure the parent param is valid, if it was given.
-		if (parent && typeof parent !== 'object') {
-			throw new TypeError('sheath.object() error: parent must be an object')
-		}
+		// Make sure object and parent (if given) are valid.
+		Assert.object(object, 'Object')
+		if (parent) Assert.object(parent, 'Parent')
 
 		// Make the parent the object's prototype.
 		object = Object.create(parent || null, Sheath.toPropertyDescriptors(object))
@@ -1067,25 +1135,15 @@
 		A modifier can define behavior for the declaration, loading, definition, and injection of a custom module type.
 	*/
 	sheath.registerMod = function(name, factory) {
-		if (typeof name !== 'string') {
-			throw new TypeError('Sheath.js Error - sheath.registerMod() - Mod name must be a string. Received "' + typeof name + '".')
-		}
-		
-		// The new mod will share the sheath namespace, so make sure it doesn't conflict.
-		if (sheath[name]) {
-			throw new Error('Sheath.js Error - sheath.registerMod() - Mod name "' + name + '" already exists in the sheath namespace.')
-		}
-		
-		if (typeof factory !== 'function') {
-			throw new TypeError('Sheath.js Error - sheath.registerMod() - Factory must be a function. Received "' + typeof factory + '".')
-		}
+		Assert.setFunc('sheath.registerMod()')
+		Assert.string(name, 'Name')
+		Assert.noNamespaceCollision(name) // the new mod will share the sheath namespace, so make sure it doesn't conflict
+		Assert.func(factory, 'Factory')
 		
 		// Call the factory to set up the modifier.
-		var mod = factory()
+		var mod = factory(Sheath.link.bind(Sheath))
 		
-		if (typeof mod !== 'object') {
-			throw new TypeError('Sheath.js Error - sheath.registerMod() - Mod factory must return an object. Received "' + typeof mod + '".')
-		}
+		Assert.object(mod, 'Mod factory for mod "' + name + '" failed to return an object.')
 		
 		Sheath.incorporateMod(name, mod)
 		return sheath // for chaining
@@ -1097,24 +1155,22 @@
 		Useful for circumventing circular dependencies.
 		The 'deps' arg is optional, so this can also be used to defer execution until after the config phase.
 	*/
-	sheath.run = function(deps, func) {
-		// Arg swapping -- deps is optional; if 'func' doesn't exist, move it down.
-		if (!func) {
-			func = deps
+	sheath.run = function(deps, factory) {
+		// Arg swapping -- deps is optional; if 'factory' doesn't exist, move it down.
+		if (!factory) {
+			factory = deps
 			deps = []
 		}
-		if (typeof func !== 'function') {
-			throw new TypeError('Sheath.js Error: sheath.run() expects a function. Received "' + typeof func + '".')
-		}
+		Assert.setFunc('sheath.run()')
+		Assert.func(factory, 'Factory')
 		if (typeof deps === 'string') deps = [deps] // if 'deps' is a string, make it the only dependency
-		if (!Array.isArray(deps)) {
-			throw new TypeError('Sheath.js Error: sheath.run() expects the deps to be a string or array of strings. Received "' + typeof deps + '".')
-		}
+		Assert.array(deps, 'If specified, deps must be a string or array of strings.')
+		
 		if (Sheath.configPhase) {
-			Sheath.initialModules.push({name: false, deps: deps, factory: func})
+			Sheath.initialModules.push({name: false, deps: deps, factory: factory})
 			return
 		}
-		Sheath.moduleFactory(false, deps, func)
+		Sheath.moduleFactory(false, deps, factory)
 		return sheath // for chaining
 	}
 	
@@ -1124,12 +1180,9 @@
 	*/
 	var nonMutating = ['every', 'filter', 'forEach', 'indexOf', 'join', 'lastIndexOf', 'map', 'reduce', 'reduceRight', 'slice', 'some']
 	sheath.store = function(arr, props) {
-		if (!Array.isArray(arr)) {
-			throw new TypeError('Sheath.js Error: sheath.store() expects the first parameter to be an array. Received "' + typeof arr + '".')
-		}
-		if (props && typeof props !== 'object') {
-			throw new TypeError('Sheath.js Error: sheath.store() expects the second parameter, if given, to be an object. Received "' + typeof props + '".')
-		}
+		Assert.setFunc('sheath.store()')
+		Assert.array(arr, 'Collection')
+		if (props) Assert.object(props, 'Api')
 
 		var store = {}
 
@@ -1172,24 +1225,22 @@
 	*/
 	sheath.registerMod('lib', function() {
 		var api = function(moduleName, globalName, fileName) {
-			if (typeof moduleName !== 'string') {
-				throw new TypeError('Sheath.js Error - sheath.lib() - Module name must be a string. Received "' + typeof moduleName + '".')
-			}
+			Assert.setFunc('sheath.lib()')
+			Assert.string(moduleName, 'Name')
+			
 			// Arg swapping -- if 'globalName' is a url, it isn't a valid identifier and is actually the filename; move 'fileName' down.
 			if (Sheath.isUrl(globalName)) {
 				fileName = globalName
 				globalName = undefined
 			}
 			if (!globalName) globalName = moduleName // allow overload: sheath.lib('Backbone')
-			if (typeof globalName !== 'string') {
-				throw new TypeError('Sheath.js Error - sheath.lib() - Global identifier must be a string. Received "' + typeof globalName + '".')
-			}
-			if (fileName && typeof fileName !== 'string') {
-				throw new TypeError('Sheath.js Error - sheath.lib() - File name must be a string, if specified. Received "' + typeof fileName + '".')
-			}
+			
+			Assert.string(globalName, 'Global identifier must be a string.')
+			if (fileName) Assert.string(fileName, 'Filename')
+			
 			var lib = new Lib(moduleName, globalName, fileName)
 			lib.declare()
-			return api
+			return api // for chaining
 		}
 		
 		var Lib = function(moduleName, globalName, fileName) {
@@ -1204,6 +1255,8 @@
 			
 			factory: function() {
 				var module = sheath.current()
+				
+				// Don't defer this module if we don't have to (if the lib is already loaded).
 				if (!this.fileName || Sheath.global[this.globalName]) return this.onload()
 				
 				module.defer()
@@ -1212,16 +1265,16 @@
 			
 			onload: function(module, err) {
 				var definition = Sheath.global[this.globalName] // grab the lib's api off the global scope
-				if (err || typeof definition === 'undefined' && Sheath.devMode) {
-					console.warn('Sheath.js Warning: Unable to create lib "' + this.name + '". Global property "' + this.globalName + '" not found. Make sure the library is loaded.')
-				}
+				Assert.libLoaded(err, definition, this.name, this.globalName)
+				
 				// Account for sync and async resolution.
 				return module ? module.resolve(definition) : definition
 			}
 		}
 		
 		var handle = function(name, resolve, previous) {
-			throw new Error('Sheath.js Error: The lib modifier does not support prefixed dependencies (e.g. "lib!MyLib"). Use sheath.lib() during the config phase to create a lib, then include it as an unprefixed dependency.')
+			Assert.setFunc('Lib Modifier')
+			Assert.error(Error, 'Prefixed dependencies (e.g. "lib!MyLib") are not supported. Use sheath.lib() during the config phase to create a lib, then include it as an unprefixed dependency.')
 		}
 		
 		return {
@@ -1240,12 +1293,11 @@
 		var loading = {}
 		
 		var api = function(name, content) {
-			if (typeof name !== 'string') {
-				throw new TypeError('Sheath.js Error - sheath.text() - Name must be a string. Received "' + typeof name + '".')
-			}
+			Assert.setFunc('sheath.text()')
+			Assert.string(name, 'Name')
 			if (typeof textModules[name] !== 'undefined') {
 				if (typeof content === 'undefined') return textModules[name]
-				throw new Error('Sheath.js Error - sheath.text() - A text module with name "' + name + '" already exists')
+				Assert.error(Error, 'A text module with name "' + name + '" already exists.')
 			}
 			
 			resolve(name, content)

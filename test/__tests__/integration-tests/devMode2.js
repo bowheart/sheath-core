@@ -14,7 +14,7 @@ describe('devMode enables more advanced debugging tools', () => {
 			}
 			sheath('module1', 'nonexistent-module', () => {})
 		}).then(result => {
-			expect(result).toMatch(/lazy-loading disabled.*sync phase ended.*undeclared modules/i)
+			expect(result).toMatch(/lazy-loading.*disabled/i)
 		})
 	})
 
@@ -33,5 +33,11 @@ describe('devMode enables more advanced debugging tools', () => {
 			expect(result).toMatch(/module3/mi)
 			expect(result.split('->')).toHaveLength(3)
 		})
+	})
+	
+	it('logs a warning when sheath.current() is called outside a module definition', () => {
+		console.warn = jest.fn()
+		sheath.current()
+		expect(console.warn).toHaveBeenCalled()
 	})
 })
