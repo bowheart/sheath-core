@@ -42,7 +42,7 @@
 				depsKeys = Object.keys(deps)
 			
 			for (var i = 0; i < depsKeys.length; i++) {
-				var result = this.dfs(chain, this.declaredModules[deps[depsKeys[i]].name])
+				var result = this.dfs(chain, Sheath.declaredModules[deps[depsKeys[i]].name])
 				
 				if (result) return result
 			}
@@ -59,8 +59,33 @@
 			throw new type('Sheath.js Error - ' + this._func + ' - ' + message)
 		},
 		
+		falsy: function(val, name) {
+			if (val) this.error(Error, name, val, 'falsy')
+		},
+		
 		func: function(val, name) {
 			if (typeof val !== 'function') this.error(TypeError, name, val, 'a function')
+		},
+		
+		libLoaded: function(err, definition, libName, globalName) {
+			if (err || typeof definition === 'undefined' && Sheath.devMode) {
+				this.warn('Unable to create lib "' + libName + '". Global property "' + globalName + '" not found. Make sure the library is loaded.')
+			}
+		},
+		
+		loadNotFailed: function(loader, loadable) {
+			if (!Sheath.devMode) return // check only applicable in devMode
+			
+			loadable.onerror = function() {
+				var description = loader.moduleName ? 'module "' + loader.moduleName + '"' : 'file "' + loader.fileName + '"'
+				this.warn('Attempt to lazy-load ' + description + ' failed. Potential hang situation.')
+			}.bind(this)
+		},
+		
+		moduleFoundInFile: function(moduleName) {
+			if (Sheath.devMode && moduleName && !Sheath.declaredModules[moduleName]) {
+				this.warn('Module file successfully loaded, but module "' + moduleName + '" not found. Potential hang situation.')
+			}
 		},
 		
 		noCircularDeps: function(module) {
@@ -81,9 +106,9 @@
 		},
 		
 		noUndeclaredModules: function(undeclaredModules) {
-			// This check only applies in devMode when async loading is disabled
-			if (this.devMode && !this.asyncEnabled && undeclaredModules.length) {
-				this.warn('Lazy-loading is disabled, but the Sync Phase has ended and the following modules have not been declared:', this.undeclaredModules(true))
+			// This check only applies in devMode when async loading is disabled.
+			if (Sheath.devMode && !Sheath.asyncEnabled && undeclaredModules.length) {
+				this.warn('Lazy-loading is disabled, but the Sync Phase has ended and the following modules have not been declared:', Sheath.undeclaredModules(true))
 			}
 		},
 		
@@ -116,8 +141,56 @@
 			if (!Sheath.tasks.length) this.warn('No module is currently being defined. Call to sheath.current() will return null.')
 		},
 		
+		truthy: function(val, name) {
+			if (!val) this.error(Error, name, val, 'truthy')
+		},
+		
 		validConfigSetting: function(val) {
 			if (!sheath.config[val]) this.setFunc('sheath.config()').error(ReferenceError, val, 'Invalid config setting "' + val + '"')
+		},
+		
+		validDepName: function(moduleName, oldName, newName) {
+			this.setFunc('Invalid Dependency "' + oldName + '"')
+			this.truthy(newName, 'Dependencies cannot be empty')
+			
+			var sep = Sheath.SEPARATOR
+			if (newName.slice(-sep.length) === sep) {
+				this.error(Error, 'Dependency names cannot end with "' + sep + '"')
+			}
+		},
+		
+		validMods: function(moduleName, mods) {
+			this.setFunc('Module "' + moduleName + '"')
+			for (var i = 0; i < mods.length; i++) {
+				if (!Sheath.mods[mods[i]]) this.error(ReferenceError, 'Unregistered modifier "' + mods[i] + '" used. Make sure the mod is loaded during the config phase.')
+			}
+		},
+		
+		validModuleName: function(name) {
+			if (name === false) return // a NamelessModule; ignore
+			
+			this.setFunc('Invalid Module Name')
+			this.truthy(name, 'Module names cannot be empty')
+			
+			var culprit = '. The culprit: "' + name + '"'
+			if (name[0] === '.') {
+				this.error(Error, 'Module names cannot be relative (they can\'t start with ".")' + culprit)
+			}
+			
+			var sep = Sheath.SEPARATOR
+			if (sep && (name.slice(0, sep.length) === sep || name.slice(-sep.length) === sep)) {
+				this.error(Error, 'Module names cannot start or end with "' + sep + '"' + culprit)
+			}
+			
+			var acc = Sheath.ACCESSOR
+			if (acc && ~name.indexOf(acc)) {
+				this.error(Error, 'Module names cannot contain "' + acc + '"' + culprit)
+			}
+			
+			var pipe = Sheath.MOD_PIPE
+			if (~name.indexOf(pipe)) {
+				this.error(Error, 'Module names cannot contain the mod pipe ("' + pipe + '")' + culprit)
+			}
 		},
 		
 		validMode: function(val) {
@@ -125,6 +198,7 @@
 		},
 		
 		warn: function(message) {
+			if (!Sheath.devMode) return // warnings only available in devMode
 			console.warn('Sheath.js Warning: ' + message)
 		}
 	}
@@ -256,7 +330,7 @@
 		},
 		
 		moduleFactory: function(name, deps, factory) {
-			this.validateModuleName(name)
+			Assert.validModuleName(name)
 			var newModule = new (name ? Module : NamelessModule)(name, deps, factory)
 			newModule.declare()
 			newModule.define() // attempt to define this module synchronously, in case there are no deps
@@ -336,52 +410,6 @@
 			})
 		},
 		
-		validateDepName: function(moduleName, oldName, newName) {
-			if (!newName) {
-				throw new Error('Sheath.js Error: Module "' + moduleName + '" has an empty dependency ("' + oldName + '"). You must specify a name for the dependency.')
-			}
-			
-			var sep = this.SEPARATOR
-			if (newName.slice(-sep.length) === sep) {
-				throw new Error('Sheath.js Error: Module "' + moduleName + '" has an invalid dependency ("' + oldName + '"). Dependencies cannot end with "' + sep + '".')
-			}
-		},
-		
-		validateMods: function(moduleName, mods) {
-			for (var i = 0; i < mods.length; i++) {
-				if (this.mods[mods[i]]) continue
-				
-				throw new Error('Sheath.js Error: Dependency for module "' + moduleName + '" is requesting an unregistered modifier "' + mods[i] + '". Make sure the mod is loaded during the config phase.')
-			}
-		},
-		
-		validateModuleName: function(name) {
-			if (name === false) return // a NamelessModule; ignore
-			
-			if (!name) {
-				throw new Error('Sheath.js Error: Module names cannot be empty')
-			}
-			var culprit = '. The culprit: "' + name + '"'
-			if (name[0] === '.') {
-				throw new Error('Sheath.js Error: Module names cannot be relative (start with ".")' + culprit)
-			}
-			
-			var sep = this.SEPARATOR
-			if (sep && (name.slice(0, sep.length) === sep || name.slice(-sep.length) === sep)) {
-				throw new Error('Sheath.js Error: Module names cannot start or end with "' + sep + '"' + culprit)
-			}
-			
-			var acc = this.ACCESSOR
-			if (acc && ~name.indexOf(acc)) {
-				throw new Error('Sheath.js Error: Module names cannot contain "' + acc + '"' + culprit)
-			}
-			
-			var pipe = this.MOD_PIPE
-			if (~name.indexOf(pipe)) {
-				throw new Error('Sheath.js Error: Module names cannot contain the mod pipe ("' + pipe + '")' + culprit)
-			}
-		},
-		
 		get devMode() { return this.mode === 'dev' || this.mode === 'analyze' },
 		get analyzeMode() { return this.mode === 'analyze' },
 		get configPhase() { return this.phase === 'config' },
@@ -437,7 +465,7 @@
 		},
 		
 		defer: function() {
-			if (this.defined) throw new Error('Sheath.js Error: Module.defer() must be called during the synchronous execution of the module factory')
+			Assert.setFunc('Module.defer()').falsy(this.defined, 'This method must be called during the synchronous execution of the module factory.')
 			this.deferring = true
 			return this.interface // for chaining
 		},
@@ -471,16 +499,14 @@
 			
 			for (var i = 0; i < this.deps.length; i++) {
 				var depName = this.deps[i]
-				if (typeof depName !== 'string') {
-					throw new TypeError('Sheath.js Error: All module dependencies must be strings. Received "' + typeof depName + '".')
-				}
+				
+				Assert.setFunc('Invalid dependency "' + depName + '" for module "' + this.name + '"')
+				Assert.string(depName, 'Module dependencies must be strings.')
 				
 				var mappedDep = this.mapDep(depName)
 				mappedDep.index = i
 				
-				if (mappedDeps[mappedDep.name]) {
-					throw new Error('Sheath.js Error: Duplicate dependency detected for module "' + this.name + '". Requested dep: "' + mappedDep.name + '"')
-				}
+				Assert.falsy(mappedDeps[mappedDep.name], 'Duplicate dependency detected.')
 				
 				rawDeps.push(mappedDep.name)
 				Sheath.addDependent(this, mappedDep.name)
@@ -509,8 +535,8 @@
 				mods = name.split(pipe),
 				newName = mods.pop()
 			
-			Sheath.validateDepName(this.name, name, newName)
-			if (mods.length) Sheath.validateMods(this.name, mods)
+			Assert.validDepName(this.name, name, newName)
+			if (mods.length) Assert.validMods(this.name, mods)
 			
 			return {
 				name: newName,
@@ -688,9 +714,7 @@
 		scriptSuccessful: function() {
 			if (this.onload) this.onload(null)
 			
-			if (Sheath.devMode && this.moduleName && !Sheath.declaredModules[this.moduleName]) {
-				console.warn('Sheath.js Warning: Module file successfully loaded, but module "' + this.moduleName + '" not found. Potential hang situation.')
-			}
+			Assert.moduleFoundInFile(this.moduleName)
 		}
 	}
 	
@@ -703,13 +727,7 @@
 	ClientLoader.prototype = Object.create(Loader.prototype, Sheath.toPropertyDescriptors({
 		attachHandlers: function(loadable) {
 			loadable.onload = this.loadSuccessful
-			
-			if (!Sheath.devMode) return
-			
-			loadable.onerror = function() {
-				var description = this.moduleName ? 'module "' + this.moduleName + '"' : 'file "' + this.fileName + '"'
-				console.warn('Sheath.js Warning: Attempt to lazy-load ' + description + ' failed. Potential hang situation.')
-			}.bind(this)
+			Assert.loadNotFailed(this, loadable)
 		},
 		
 		implementLoad: function() {
@@ -774,9 +792,7 @@
 		
 		loadComplete: function(err, fileContents) {
 			if (err) {
-				if (Sheath.devMode) {
-					console.warn('Sheath.js Warning: Failed to find file "' + this.fileName + '" on the server. Potential hang situation.', err)
-				}
+				Assert.warn('Failed to find file "' + this.fileName + '" on the server. Potential hang situation.')
 				return this.onload && this.onload(err)
 			}
 			fileContents = fileContents.toString()
@@ -868,7 +884,7 @@
 		if (!newResolver) return Sheath.asyncResolver
 		Assert.setFunc('sheath.config.asyncResolver()')
 		Assert.configPhase()
-		Assert.func('asyncResolver')
+		Assert.func(newResolver, 'asyncResolver')
 
 		Sheath.asyncResolver = newResolver
 		return sheath.config // for chaining
@@ -1249,16 +1265,16 @@
 			
 			onload: function(module, err) {
 				var definition = Sheath.global[this.globalName] // grab the lib's api off the global scope
-				if (err || typeof definition === 'undefined' && Sheath.devMode) {
-					Assert.warn('Unable to create lib "' + this.name + '". Global property "' + this.globalName + '" not found. Make sure the library is loaded.')
-				}
+				Assert.libLoaded(err, definition, this.name, this.globalName)
+				
 				// Account for sync and async resolution.
 				return module ? module.resolve(definition) : definition
 			}
 		}
 		
 		var handle = function(name, resolve, previous) {
-			throw new Error('Sheath.js Error: The lib modifier does not support prefixed dependencies (e.g. "lib!MyLib"). Use sheath.lib() during the config phase to create a lib, then include it as an unprefixed dependency.')
+			Assert.setFunc('Lib Modifier')
+			Assert.error('Prefixed dependencies (e.g. "lib!MyLib") are not supported. Use sheath.lib() during the config phase to create a lib, then include it as an unprefixed dependency.')
 		}
 		
 		return {
@@ -1281,7 +1297,7 @@
 			Assert.string(name, 'Name')
 			if (typeof textModules[name] !== 'undefined') {
 				if (typeof content === 'undefined') return textModules[name]
-				throw new Error('Sheath.js Error - sheath.text() - A text module with name "' + name + '" already exists')
+				Assert.error(Error, 'A text module with name "' + name + '" already exists.')
 			}
 			
 			resolve(name, content)
