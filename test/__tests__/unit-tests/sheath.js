@@ -38,8 +38,8 @@ describe('sheath()', () => {
 		return new Promise(resolve => {
 			sheath.run(resolve)
 		}).then(result => {
-			expect(sheath.bind(null, 'invalid', '', () => {})).toThrowError(/has an empty dependency/i)
-			expect(sheath.bind(null, 'invalid', ['dep', ''], () => {})).toThrowError(/has an empty dependency/i)
+			expect(sheath.bind(null, 'invalid', '', () => {})).toThrowError(/cannot be empty/i)
+			expect(sheath.bind(null, 'invalid', ['dep', ''], () => {})).toThrowError(/cannot be empty/i)
 		})
 	})
 	
@@ -166,7 +166,7 @@ describe('sheath()', () => {
 		return new Promise(resolve => {
 			setTimeout(resolve)
 		}).then(result => {
-			expect(sheath.bind(null, 'module7', () => {})).toThrowError(/multiple modules .*same name/i)
+			expect(sheath.bind(null, 'module7', () => {})).toThrowError(/multiple modules/i)
 		})
 	})
 	

@@ -6,7 +6,7 @@ const sheath = require('../../../src/sheath')
 
 describe('sheath.load()', () => {
 	it('asserts that the fileName is a string', () => {
-		expect(sheath.load.bind(null, [])).toThrowError(/file name must be a string/i)
+		expect(sheath.load.bind(null, [])).toThrowError(/filename must be a string/i)
 	})
 	
 	it('asserts that the onload callback is a function', () => {

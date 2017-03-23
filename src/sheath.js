@@ -89,7 +89,7 @@
 		},
 		
 		noCircularDeps: function(module) {
-			if (!this.devMode || !this.dependents[module.name].length) return
+			if (!Sheath.devMode || !Sheath.dependents[module.name].length) return
 			
 			// This module has been listed as a dependency of other modules; check for circular dependencies (devMode only).
 			var modules = [],
@@ -102,7 +102,7 @@
 		},
 		
 		noNamespaceCollision: function(name) {
-			if (sheath[name]) this.error(Error, name, 'Mod name "' + name + '" already exists in the sheath namespace.')
+			if (sheath[name]) this.error(Error, 'Mod name "' + name + '" already exists in the sheath namespace.')
 		},
 		
 		noUndeclaredModules: function(undeclaredModules) {
@@ -146,7 +146,7 @@
 		},
 		
 		validConfigSetting: function(val) {
-			if (!sheath.config[val]) this.setFunc('sheath.config()').error(ReferenceError, val, 'Invalid config setting "' + val + '"')
+			if (!sheath.config[val]) this.setFunc('sheath.config()').error(ReferenceError, 'Invalid config setting "' + val + '"')
 		},
 		
 		validDepName: function(moduleName, oldName, newName) {
@@ -157,6 +157,10 @@
 			if (newName.slice(-sep.length) === sep) {
 				this.error(Error, 'Dependency names cannot end with "' + sep + '"')
 			}
+		},
+		
+		validMode: function(val) {
+			if (!~['production', 'dev', 'analyze'].indexOf(val)) this.error(Error, 'Invalid mode "' + val + '". Valid modes are "production", "dev", and "analyze"')
 		},
 		
 		validMods: function(moduleName, mods) {
@@ -191,10 +195,6 @@
 			if (~name.indexOf(pipe)) {
 				this.error(Error, 'Module names cannot contain the mod pipe ("' + pipe + '")' + culprit)
 			}
-		},
-		
-		validMode: function(val) {
-			if (!~['production', 'dev', 'analyze'].indexOf(val)) this.error(Error, 'Invalid mode "' + val + '". Valid modes are "production", "dev", and "analyze"')
 		},
 		
 		warn: function(message) {
@@ -291,7 +291,7 @@
 		},
 		
 		incorporateMod: function(name, mod) {
-			Assert.setFunc('Mod "' + mod + '"')
+			Assert.setFunc('Mod "' + mod.name + '"')
 			Assert.set(mod.api, 'All mods must have an "api" property.')
 			Assert.func(mod.handle, 'All mods must have a "handle" function.')
 			
@@ -853,7 +853,7 @@
 			Assert.validConfigSetting(key)
 			return sheath.config[key](val)
 		}
-		Assert.object(key, 'sheath.config()', 'Key must be a string or an object of [config setting]->[value] pairs.')
+		Assert.object(key, 'Key must be a string or an object of [config setting]->[value] pairs.')
 		
 		Object.keys(key).forEach(function(prop) {
 			Assert.validConfigSetting(prop)
@@ -1099,7 +1099,7 @@
 			object : object -- optional -- (Required if parent is specified) The new object you want created.
 	*/
 	sheath.object = function(parent, object) {
-		Assert.setfunc('sheath.object()')
+		Assert.setFunc('sheath.object()')
 		Assert.notConfigPhase()
 
 		// Arg swapping -- 'parent' is optional; if 'object' doesn't exist, move it down.
@@ -1274,7 +1274,7 @@
 		
 		var handle = function(name, resolve, previous) {
 			Assert.setFunc('Lib Modifier')
-			Assert.error('Prefixed dependencies (e.g. "lib!MyLib") are not supported. Use sheath.lib() during the config phase to create a lib, then include it as an unprefixed dependency.')
+			Assert.error(Error, 'Prefixed dependencies (e.g. "lib!MyLib") are not supported. Use sheath.lib() during the config phase to create a lib, then include it as an unprefixed dependency.')
 		}
 		
 		return {

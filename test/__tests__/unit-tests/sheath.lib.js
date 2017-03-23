@@ -6,7 +6,7 @@ const sheath = require('../../../src/sheath')
 
 describe('sheath.lib()', () => {
 	it('asserts that the moduleName is a string', () => {
-		expect(sheath.lib.bind(null, {})).toThrowError(/module name must be a string/i)
+		expect(sheath.lib.bind(null, {})).toThrowError(/name must be a string/i)
 	})
 	
 	it('asserts that the globalName is a string', () => {
@@ -14,7 +14,7 @@ describe('sheath.lib()', () => {
 	})
 	
 	it('asserts that the fileName is a string', () => {
-		expect(sheath.lib.bind(null, 'lib1', 'lib1Ident', {})).toThrowError(/file name must be a string/i)
+		expect(sheath.lib.bind(null, 'lib1', 'lib1Ident', {})).toThrowError(/filename must be a string/i)
 	})
 	
 	it('asserts that the moduleName does not start with "."', () => {
@@ -97,10 +97,10 @@ describe('sheath.lib()', () => {
 	})
 	
 	it('cannot declare the same lib twice', () => {
-		expect(sheath.lib.bind(null, 'lib1')).toThrowError(/multiple modules.*same name/i)
+		expect(sheath.lib.bind(null, 'lib1')).toThrowError(/multiple modules/i)
 	})
 	
 	it('does not provide a handler for lib! modules', () => {
-		expect(sheath.run.bind(null, 'lib!SomeLib', () => {})).toThrowError(/does not support prefixed dependencies/i)
+		expect(sheath.run.bind(null, 'lib!SomeLib', () => {})).toThrowError(/prefixed dependencies/i)
 	})
 })

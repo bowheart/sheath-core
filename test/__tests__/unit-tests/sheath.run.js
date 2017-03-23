@@ -6,8 +6,8 @@ const sheath = require('../../../src/sheath')
 
 describe('sheath.run()', () => {
 	it('asserts that a function is passed', () => {
-		expect(sheath.run.bind(null, 'func')).toThrowError(/expects a function/i)
-		expect(sheath.run.bind(null, [], 'func')).toThrowError(/expects a function/i)
+		expect(sheath.run.bind(null, 'func')).toThrowError(/must be a function/i)
+		expect(sheath.run.bind(null, [], 'func')).toThrowError(/must be a function/i)
 	})
 	
 	it('asserts that the deps is a string or array', () => {

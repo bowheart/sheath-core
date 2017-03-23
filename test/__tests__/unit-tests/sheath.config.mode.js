@@ -25,7 +25,7 @@ describe('sheath.config.mode()', () => {
 	})
 
 	it('asserts that the passed value is one of ["production", "dev", "analyze"]', () => {
-		expect(sheath.config.mode.bind(null, 'other')).toThrowError(/not a valid mode/i)
+		expect(sheath.config.mode.bind(null, 'other')).toThrowError(/invalid mode/i)
 	})
 
 	it('cannot be modified after the config phase', () => {

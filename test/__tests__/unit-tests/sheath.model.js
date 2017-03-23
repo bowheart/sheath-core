@@ -14,7 +14,7 @@ describe('sheath.model()', () => {
 		return new Promise(resolve => {
 			sheath.run(resolve)
 		}).then(result => {
-			expect(sheath.model.bind(null, '')).toThrowError(/sheath\.model.*expects.*an object/i)
+			expect(sheath.model.bind(null, '')).toThrowError(/sheath\.model.*must be an object/i)
 		})
 	})
 
@@ -32,7 +32,7 @@ describe('sheath.model()', () => {
 		return new Promise(resolve => {
 			sheath.run(resolve)
 		}).then(result => {
-			expect(sheath.model.bind(null, {init: 'init'})).toThrowError(/sheath\.model.*expects.*init.*a function/i)
+			expect(sheath.model.bind(null, {init: 'init'})).toThrowError(/sheath\.model.*init.*a function/i)
 		})
 	})
 
@@ -60,7 +60,7 @@ describe('sheath.model()', () => {
 		return new Promise(resolve => {
 			sheath.run(resolve)
 		}).then(result => {
-			expect(sheath.model.bind(null, 'the-parent', {})).toThrowError(/sheath\.model.*expects.* a .*function/i)
+			expect(sheath.model.bind(null, 'the-parent', {})).toThrowError(/sheath\.model.*must be a .*function/i)
 		})
 	})
 

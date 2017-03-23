@@ -6,11 +6,11 @@ const sheath = require('../../../src/sheath')
 
 describe('sheath.store()', () => {
 	it('asserts that the first param is an array', () => {
-		expect(sheath.store.bind(null, 'param')).toThrowError(/expects.*an array/i)
+		expect(sheath.store.bind(null, 'param')).toThrowError(/must be an array/i)
 	})
 	
 	it('asserts that the second param is an object, if given', () => {
-		expect(sheath.store.bind(null, [], 'param2')).toThrowError(/expects.*an object/i)
+		expect(sheath.store.bind(null, [], 'param2')).toThrowError(/must be an object/i)
 	})
 	
 	it('returns an object with all common non-mutating Array.prototype properties', () => {
