@@ -23,8 +23,8 @@
 			if (!Array.isArray(val)) this.error(TypeError, name, val, 'an array')
 		},
 		
-		configPhase: function() {
-			if (!Sheath.configPhase) this.error(Error, 'Setting can only be set during the Config Phase.')
+		configPhase: function(message) {
+			if (!Sheath.configPhase) this.error(Error, message || 'Setting can only be set during the Config Phase.')
 		},
 		
 		constNotDeclared: function(key) {
@@ -160,7 +160,7 @@
 		},
 		
 		validMode: function(val) {
-			if (!~['production', 'dev', 'analyze'].indexOf(val)) this.error(Error, 'Invalid mode "' + val + '". Valid modes are "production", "dev", and "analyze"')
+			if (!~['production', 'development', 'analyze'].indexOf(val)) this.error(Error, 'Invalid mode "' + val + '". Valid modes are "production", "development", and "analyze"')
 		},
 		
 		validMods: function(moduleName, mods) {
@@ -204,6 +204,30 @@
 	}
 	
 	
+	var Hook = {
+		moduleDeclaredListeners: [],
+		moduleDefinedListeners: [],
+		
+		mapDeps: function(module) {
+			return module.rawDeps.map(function(dep) { return dep }) // map so that we hand a deep copy to the listener
+		},
+		
+		moduleDeclared: function(module) {
+			var deps = this.mapDeps(module)
+			for (var i = 0; i < this.moduleDeclaredListeners.length; i++) {
+				this.moduleDeclaredListeners[i](module.name, deps, module.factory)
+			}
+		},
+		
+		moduleDefined: function(module) {
+			var deps = this.mapDeps(module)
+			for (var i = 0; i < this.moduleDefinedListeners.length; i++) {
+				this.moduleDefinedListeners[i](module.name, deps, module.visage)
+			}
+		}
+	}
+	
+	
 	/*
 		Sheath -- A private utility for keeping track of/manipulating modules.
 		Moves all modules through this process:
@@ -213,7 +237,7 @@
 		ACCESSOR: '.',
 		MOD_PIPE: '!',
 		SEPARATOR: '/',
-		URL_REGEX: /\/|\./,
+		URL_REGEX: /\//,
 		
 		asyncEnabled: true, // async is enabled by default
 		constants: {},
@@ -221,6 +245,7 @@
 		definedModules: {},
 		dependents: {}, // map dependencies to all dependents found for that module; this turns defining a module into a simple lookup -- O(1)
 		initialModules: [], // these are the modules found during the config phase that will need to be defined in the sync phase
+		linkedModules: {},
 		mode: 'production', // by default, Sheath is in productionMode; devMode and analyzeMode must be enabled manually
 		mods: {}, // the mod handlers for all registered mods; these will be called to handle injection of their custom module types
 		phase: 'config', // Sheath begins in Config Phase. The two other phases will come in once all initial scripts are loaded
@@ -304,7 +329,25 @@
 		},
 		
 		link: function(name, deps, factory) {
+			Assert.setFunc('sheath.link()')
+			Assert.falsy(this.linkedModules[name], 'Module "' + name + '"already linked.')
 			
+			// Arg swapping -- deps is optional; if 'factory' doesn't exist, move it down.
+			if (!factory) {
+				factory = deps
+				deps = []
+			}
+			Assert.string(name, 'Name')
+			Assert.func(factory, 'Factory')
+			if (typeof deps === 'string') deps = [deps] // if 'deps' is a string, make it the only dependency
+			Assert.array(deps, 'If specified, deps must be a string or array of strings.')
+			
+			this.linkedModules[name] = {deps: deps, factory: factory}
+			var module = this.declaredModules[name]
+			if (!module) return // let this link be picked up when the module is declared
+			
+			Assert.truthy(module instanceof CustomModule, 'Linked modules must be custom (modifier) modules')
+			module.link(deps, factory)
 		},
 		
 		/*
@@ -347,7 +390,12 @@
 			
 			var newModule = new CustomModule(dep)
 			newModule.declare()
-			newModule.applyMods()
+			
+			// If the modifier has already provided a linked module for this dep, link it. Otherwise, inform the modifier that it's got a new module.
+			var linkedModule = this.linkedModules[dep.name]
+			return linkedModule
+				? newModule.link(linkedModule.deps, linkedModule.factory)
+				: newModule.applyMods()
 		},
 		
 		taskEnd: function() {
@@ -410,7 +458,7 @@
 			})
 		},
 		
-		get devMode() { return this.mode === 'dev' || this.mode === 'analyze' },
+		get devMode() { return this.mode === 'development' || this.mode === 'analyze' },
 		get analyzeMode() { return this.mode === 'analyze' },
 		get configPhase() { return this.phase === 'config' },
 		get asyncPhase() { return this.phase === 'async' },
@@ -439,6 +487,7 @@
 		addAsDefinedModule: function() {
 			if (this.definitionSaved || this.deferring) return
 			this.definitionSaved = true
+			Hook.moduleDefined(this)
 			Sheath.addDefinedModule(this)
 		},
 		
@@ -462,6 +511,7 @@
 		
 		declare: function() {
 			Sheath.addDeclaredModule(this)
+			Hook.moduleDeclared(this)
 		},
 		
 		defer: function() {
@@ -649,9 +699,26 @@
 			Sheath.mods[nextMod](this.rawName, this.resolveMod.bind(this), definition) // this is a mod's handle function signature
 		},
 		
+		declare: function() {
+			Sheath.addDeclaredModule(this)
+		},
+		
 		implementDefine: function() {}, // no-op
 		
+		link: function(deps, factory) {
+			this.linked = true
+			Module.call(this, this.name, deps, factory) // basically re-initialize this module
+			Hook.moduleDeclared(this)
+			
+			// Restore some of the initial Module methods:
+			this.implementDefine = Module.prototype.implementDefine
+			Object.defineProperty(this, 'visage', Object.getOwnPropertyDescriptor(Module.prototype, 'visage'))
+			
+			this.define() // attempt to define this module immediately, in case there are no deps
+		},
+		
 		resolveMod: function(definition) {
+			if (this.linked) return // this module has been converted into a normal module; nothing more for mods to do
 			if (this.mods.length) return this.applyMods(definition) // recurse until there are no more mods
 			
 			this.definition = definition
@@ -688,7 +755,7 @@
 		contentSuccessful: function(content) {
 			if (!this.onload) return // nothing to do
 			
-			if (typeof content !== 'string') {
+			if (content && typeof content !== 'string') {
 				// It's an xhr.
 				var status = content.target.status
 				content = content.target.response
@@ -1117,8 +1184,36 @@
 
 		return object
 	}
-
-
+	
+	
+	/*
+		sheath.onModuleDeclared() -- Register a listener that will be called every time a module is declared.
+		A hook.
+	*/
+	sheath.onModuleDeclared = function(listener) {
+		Assert.setFunc('sheath.onModuleDeclared()')
+		Assert.configPhase('Listeners can only be registered during the config phase.')
+		Assert.func(listener, 'Listener')
+		
+		Hook.moduleDeclaredListeners.push(listener)
+		return sheath // for chaining
+	}
+	
+	
+	/*
+		sheath.onModuleDefined() -- Register a listener that will be called every time a module is defined.
+		A hook.
+	*/
+	sheath.onModuleDefined = function(listener) {
+		Assert.setFunc('sheath.onModuleDefined()')
+		Assert.configPhase('Listeners can only be registered during the config phase.')
+		Assert.func(listener, 'Listener')
+		
+		Hook.moduleDefinedListeners.push(listener)
+		return sheath // for chaining
+	}
+	
+	
 	/*
 		sheath.phase() -- A debugging utility. This will return the life phase that Sheath is currently in.
 		Use this to familiarize yourself with Sheath's lifecycle.
@@ -1148,8 +1243,35 @@
 		Sheath.incorporateMod(name, mod)
 		return sheath // for chaining
 	}
-
-
+	
+	
+	/*
+		sheath.reset() -- Clear all modules and all data of every kind (except mods) and start over. (Not available in production builds).
+	*/
+	sheath.reset = function() {
+		Hook.moduleDeclaredListeners = []
+		Sheath.asyncEnabled = true
+		Sheath.constants = {}
+		Sheath.declaredModules = {}
+		Sheath.definedModules = {}
+		Sheath.dependents = {}
+		Sheath.initialModules = []
+		Sheath.linkedModules = {}
+		Sheath.mode = 'production'
+		
+		// A reset doesn't clear mods, but calls each mod's (optional) reset method, allowing them to clear themselves.
+		Object.keys(Sheath.mods).forEach(function(modName) {
+			if (sheath[modName] && typeof sheath[modName].reset === 'function') sheath[modName].reset()
+		})
+		Sheath.phase = 'config'
+		setTimeout(advancePhases)
+		Sheath.requestedFiles = {}
+		Sheath.requestedModules = {}
+		Sheath.tasks = []
+		return sheath // for chaining
+	}
+	
+	
 	/*
 		sheath.run() -- Run some code that leverages Sheath's dependency injection, but without declaring a module.
 		Useful for circumventing circular dependencies.
@@ -1183,20 +1305,20 @@
 		Assert.setFunc('sheath.store()')
 		Assert.array(arr, 'Collection')
 		if (props) Assert.object(props, 'Api')
-
+		
 		var store = {}
-
+		
 		// Put all the non-mutating methods of Array.prototype on there.
 		for (var i = 0; i < nonMutating.length; i++) {
 			var key = nonMutating[i]
 			if (typeof arr[key] === 'function') store[key] = arr[key].bind(arr)
 		}
-
+		
 		// Put a length getter on there
 		Object.defineProperty(store, 'length', {
 			get: function() { return arr.length }
 		})
-
+		
 		// Make the store iterable (es6 only)
 		if (typeof Symbol === 'function' && Symbol.iterator) {
 			store[Symbol.iterator] = function StoreIterator() {
@@ -1208,22 +1330,24 @@
 		}
 		return Sheath.extend(store, props || {})
 	}
-
-
+	
+	
 	/*
 		sheath.toString() -- Just for flair, override the default toString() method.
 	*/
 	sheath.toString = function() {
 		return 'I Am Sheath'
 	}
-
-
-
+	
+	
+	
 	/*
 		sheath.lib() -- An easy way to encapsulate/incorporate third-party libraries.
 		An example of an unprefixed modifier.
 	*/
 	sheath.registerMod('lib', function() {
+		var libs = []
+		
 		var api = function(moduleName, globalName, fileName) {
 			Assert.setFunc('sheath.lib()')
 			Assert.string(moduleName, 'Name')
@@ -1240,7 +1364,33 @@
 			
 			var lib = new Lib(moduleName, globalName, fileName)
 			lib.declare()
+			libs.push(lib)
 			return api // for chaining
+		}
+		
+		/*
+			sheath.lib.names() -- Get the names of all lib modules.
+		*/
+		api.names = function() {
+			return libs.map(function(lib) {
+				return lib.name
+			})
+		}
+		
+		/*
+			sheath.lib.files() -- Get the files of all lib modules.
+		*/
+		api.files = function() {
+			var files = libs.map(function(lib) {
+				return lib.fileName
+			}).filter(function(fileName) {
+				return fileName
+			})
+			return files
+		}
+		
+		api.reset = function() {
+			libs = []
 		}
 		
 		var Lib = function(moduleName, globalName, fileName) {
@@ -1257,18 +1407,30 @@
 				var module = sheath.current()
 				
 				// Don't defer this module if we don't have to (if the lib is already loaded).
-				if (!this.fileName || Sheath.global[this.globalName]) return this.onload()
+				if (!this.fileName || this.resolveGlobalName()) return this.onload()
 				
 				module.defer()
 				sheath.load(this.fileName, this.onload.bind(this, module), true)
 			},
 			
 			onload: function(module, err) {
-				var definition = Sheath.global[this.globalName] // grab the lib's api off the global scope
+				var definition = this.resolveGlobalName() // grab the lib's api off the global scope
 				Assert.libLoaded(err, definition, this.name, this.globalName)
 				
 				// Account for sync and async resolution.
 				return module ? module.resolve(definition) : definition
+			},
+			
+			resolveGlobalName: function(context, nodes) {
+				if (!nodes) {
+					context = Sheath.global
+					nodes = this.globalName.split('.')
+				}
+				if (!context) return
+				if (!nodes.length) return context
+				
+				var nextNode = nodes.shift()
+				return this.resolveGlobalName(context[nextNode], nodes)
 			}
 		}
 		
@@ -1282,8 +1444,8 @@
 			handle: handle
 		}
 	})
-
-
+	
+	
 	/*
 		sheath.text() -- An easy way to inject content as modules--e.g. for underscore/handlebars templating.
 		An example of a prefixed modifier.
@@ -1301,6 +1463,10 @@
 			}
 			
 			resolve(name, content)
+		}
+		api.reset = function() {
+			textModules = {}
+			loading = {}
 		}
 		
 		var handle = function(name, resolve, previous) {
@@ -1337,23 +1503,23 @@
 			handle: handle
 		}
 	})
-
-
-
+	
+	
+	
 	/*
 		Once all the initial scripts have been loaded:
 		Run the sync phase, then:
 		Turn on asychronous loading and request any not-yet-declared modules.
 	*/
-	var advancePhases = function() {
+	function advancePhases() {
 		Sheath.toPhase('sync')
-
+		
 		// setTimeout -- allow any deferred tasks set during the sync phase to complete before advancing to the async phase
 		setTimeout(Sheath.toPhase.bind(Sheath, 'async'))
 	}
 	inBrowser
 		? (window.onload = advancePhases)
 		: setTimeout(advancePhases)
-
+	
 	return sheath
 }))
