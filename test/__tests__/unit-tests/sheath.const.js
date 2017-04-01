@@ -19,13 +19,6 @@ describe('sheath.const()', () => {
 		expect(sheath.const('key3')).toBe(3)
 	})
 	
-	it('freezes objects', () => {
-		let arr = [1, 3, 5]
-		sheath.const('key4', arr)
-		expect(Object.isFrozen(sheath.const('key4'))).toBe(true)
-		expect(arr.push.bind(arr, 77)).toThrowError(/object is not extensible/i)
-	})
-	
 	it('disallows overrides', () => {
 		expect(sheath.const.bind(null, 'key1', 'new-val')).toThrowError(/overwrite disallowed/i)
 	})

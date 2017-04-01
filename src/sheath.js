@@ -338,15 +338,20 @@
 				deps = []
 			}
 			Assert.string(name, 'Name')
+			Assert.truthy(~name.indexOf(Sheath.MOD_PIPE), 'Linked modules must be custom (modifier) modules.')
 			Assert.func(factory, 'Factory')
 			if (typeof deps === 'string') deps = [deps] // if 'deps' is a string, make it the only dependency
 			Assert.array(deps, 'If specified, deps must be a string or array of strings.')
 			
 			this.linkedModules[name] = {deps: deps, factory: factory}
 			var module = this.declaredModules[name]
-			if (!module) return // let this link be picked up when the module is declared
+			if (!module) {
+				// Create a spoof dep and let the dep load scheduler create and link a module to it.
+				var dep = new Dep('', name)
+				this.scheduleDepLoad(dep)
+				return
+			}
 			
-			Assert.truthy(module instanceof CustomModule, 'Linked modules must be custom (modifier) modules')
 			module.link(deps, factory)
 		},
 		
@@ -470,6 +475,79 @@
 	
 	
 	/*
+		Dep -- A thing had by a module.
+		Deps can be relative (/module), (./module), (../../module).
+		Deps can have imports (my.import) and mods (my!mod).
+	*/
+	var Dep = function(moduleName, name, index) {
+		this.moduleName = moduleName
+		this.index = index
+		
+		Assert.setFunc('Invalid dependency "' + name + '" for module "' + this.name + '"')
+		Assert.string(name, 'Module dependencies must be strings.')
+		
+		// Determine if the dep is a custom type ("type!module") relative ("../", "./", "/") or an import ("module.import").
+		this.parseMods(name)
+		this.rawName = this.parseRelativeDep() // the rawName is the name with relative paths resolved and no mods prefixed
+		this.name = this.modsStr + this.rawName // the name is the rawName with mods prefixed (this is the name the rest of sheath knows this dep by)
+		
+		if (!this.mods.length) this.parseImport(this) // imports only apply to internal modules; if there are mods, let them handle the other characters
+	}
+	Dep.prototype = {
+		parseImport: function() {
+			var name = this.name,
+				sep = Sheath.SEPARATOR,
+				acc = Sheath.ACCESSOR
+			
+			var modulePath = name.split(sep),
+				importPath = modulePath.pop().split(acc)
+			
+			this.name = modulePath.join(sep) + (modulePath.length ? sep : '') + importPath.shift()
+			this.import = importPath.length ? importPath : false
+		},
+		
+		parseMods: function(name) {
+			var pipe = Sheath.MOD_PIPE,
+				mods = name.split(pipe),
+				newName = mods.pop()
+			
+			Assert.validDepName(this.moduleName, name, newName)
+			if (mods.length) Assert.validMods(this.moduleName, mods)
+			
+			this.name = newName
+			this.modsStr = mods.join(pipe) + (mods.length ? pipe : '')
+			this.mods = mods.reverse() // mods are applied in reverse order
+		},
+		
+		parseRelativeDep: function() {
+			var name = this.name,
+				sep = Sheath.SEPARATOR
+			
+			// sheath('module', '/submodule') -> resolves to 'module/submodule'
+			if (name.slice(0, sep.length) === sep) {
+				return this.moduleName + name
+			}
+			
+			if (name[0] !== '.') return name // not a relative path
+			var path = this.moduleName.split(sep)
+			
+			// sheath('one/a', './b') -> resolves to 'one/b'
+			if (name.slice(0, 1 + sep.length) === '.' + sep) {
+				return path.slice(0, -1).join(sep) + name.slice(1)
+			}
+			
+			// sheath('one/a/1', '../b/1') -> resolves to 'one/b/1'
+			// sheath('one/a/1', '../../two') -> resolves to 'two'
+			path.pop()
+			while (name.slice(0, 2 + sep.length) === '..' + sep) {
+				path.pop()
+				name = name.slice(2 + sep.length)
+			}
+			return path.join(sep) + (path.length ? sep : '') + name
+		},
+	}
+	
+	/*
 		Module -- A thing with an optional name and dependencies and a required definition function.
 	*/
 	var Module = function(name, deps, factory) {
@@ -532,15 +610,6 @@
 			
 			this.saveDefinition(definition)
 		},
-		
-		// Determine if the dep is a custom type ("type!module") relative ("../", "./", "/") or an import ("module.import").
-		mapDep: function(name) {
-			var dep = this.parseMods(name)
-			dep.rawName = this.parseRelativeDep(dep.name) // the rawName is the name with relative paths resolved and no mods prefixed
-			dep.name = dep.modsStr + dep.rawName // the name is the rawName with mods prefixed
-			if (!dep.mods.length) this.parseImport(dep) // imports only apply to internal modules; if there are mods, let them handle the other characters
-			return dep
-		},
 
 		// Replace the array of deps with a map of depName -> depInfo.
 		mapDeps: function() {
@@ -548,77 +617,18 @@
 				rawDeps = []
 			
 			for (var i = 0; i < this.deps.length; i++) {
-				var depName = this.deps[i]
+				var dep = new Dep(this.name, this.deps[i], i)
 				
-				Assert.setFunc('Invalid dependency "' + depName + '" for module "' + this.name + '"')
-				Assert.string(depName, 'Module dependencies must be strings.')
+				Assert.falsy(mappedDeps[dep.name], 'Duplicate dependency detected.')
 				
-				var mappedDep = this.mapDep(depName)
-				mappedDep.index = i
-				
-				Assert.falsy(mappedDeps[mappedDep.name], 'Duplicate dependency detected.')
-				
-				rawDeps.push(mappedDep.name)
-				Sheath.addDependent(this, mappedDep.name)
-				Sheath.scheduleDepLoad(mappedDep)
-				mappedDeps[mappedDep.name] = mappedDep
+				rawDeps.push(dep.name)
+				Sheath.addDependent(this, dep.name)
+				Sheath.scheduleDepLoad(dep)
+				mappedDeps[dep.name] = dep
 			}
 			this.rawDeps = rawDeps
 			this.deps = mappedDeps
 			this.resolveReadyDeps()
-		},
-		
-		parseImport: function(dep) {
-			var name = dep.name,
-				sep = Sheath.SEPARATOR,
-				acc = Sheath.ACCESSOR
-			
-			var modulePath = name.split(sep),
-				importPath = modulePath.pop().split(acc)
-			
-			dep.name = modulePath.join(sep) + (modulePath.length ? sep : '') + importPath.shift()
-			dep.import = importPath.length ? importPath : false
-		},
-		
-		parseMods: function(name) {
-			var pipe = Sheath.MOD_PIPE,
-				mods = name.split(pipe),
-				newName = mods.pop()
-			
-			Assert.validDepName(this.name, name, newName)
-			if (mods.length) Assert.validMods(this.name, mods)
-			
-			return {
-				name: newName,
-				modsStr: mods.join(pipe) + (mods.length ? pipe : ''),
-				mods: mods.reverse() // mods are applied in reverse order
-			}
-		},
-		
-		parseRelativeDep: function(name) {
-			var sep = Sheath.SEPARATOR
-			
-			// sheath('module', '/submodule') -> resolves to 'module/submodule'
-			if (name.slice(0, sep.length) === sep) {
-				return this.name + name
-			}
-			
-			if (name[0] !== '.') return name // not a relative path
-			var path = this.name.split(sep)
-			
-			// sheath('one/a', './b') -> resolves to 'one/b'
-			if (name.slice(0, 1 + sep.length) === '.' + sep) {
-				return path.slice(0, -1).join(sep) + name.slice(1)
-			}
-			
-			// sheath('one/a/1', '../b/1') -> resolves to 'one/b/1'
-			// sheath('one/a/1', '../../two') -> resolves to 'two'
-			path.pop()
-			while (name.slice(0, 2 + sep.length) === '..' + sep) {
-				path.pop()
-				name = name.slice(2 + sep.length)
-			}
-			return path.join(sep) + (path.length ? sep : '') + name
 		},
 		
 		resolve: function(definition) {
@@ -634,23 +644,23 @@
 			var resolvedVal = depInfo.import
 				? resolvedDep.resolveExport(depInfo.import)
 				: resolvedDep.visage
-
+			
 			this.resolvedDeps[depInfo.index] = resolvedVal
-
+			
 			this.depsLeft--
 			this.define()
 		},
-
+		
 		resolveExport: function(exportPath, namespace) {
 			var nextNode = exportPath.shift(), // shift() -- we should only need it once, so mutate away
 				val = namespace ? namespace[nextNode] : this.visage && this.visage[nextNode]
-
+			
 			// Don't attempt to go any deeper if the val at this level is undefined or null.
 			if (typeof val === 'undefined' || val === null) return val
-
+			
 			return exportPath.length ? this.resolveExport(exportPath, val) : val
 		},
-
+		
 		resolveReadyDeps: function() {
 			for (var i = 0; i < this.readyDeps.length; i++) {
 				this.resolveDep(this.readyDeps[i])
@@ -707,12 +717,13 @@
 		
 		link: function(deps, factory) {
 			this.linked = true
-			Module.call(this, this.name, deps, factory) // basically re-initialize this module
-			Hook.moduleDeclared(this)
 			
 			// Restore some of the initial Module methods:
 			this.implementDefine = Module.prototype.implementDefine
 			Object.defineProperty(this, 'visage', Object.getOwnPropertyDescriptor(Module.prototype, 'visage'))
+			
+			Module.call(this, this.name, deps, factory) // basically re-initialize this module
+			Hook.moduleDeclared(this)
 			
 			this.define() // attempt to define this module immediately, in case there are no deps
 		},
@@ -870,10 +881,10 @@
 			if (this.onload) this.onload(err)
 		}
 	}))
-
-
-
-
+	
+	
+	
+	
 	/*
 		sheath() -- A utility for organized, encapsulated module definition and dependency injection.
 
@@ -928,8 +939,8 @@
 		})
 		return sheath.config
 	}
-
-
+	
+	
 	/*
 		sheath.config.async() -- A getter/setter to see/define the status of the async loader.
 		Pass true to activate async loading, false to deactivate.
@@ -942,8 +953,8 @@
 		Sheath.asyncEnabled = Boolean(val)
 		return sheath.config // for chaining
 	}
-
-
+	
+	
 	/*
 		sheath.config.asyncResolver(function) -- The default async filename resolver doesn't do much. Use this guy to beef it up.
 	*/
@@ -956,8 +967,8 @@
 		Sheath.asyncResolver = newResolver
 		return sheath.config // for chaining
 	}
-
-
+	
+	
 	/*
 		sheath.config.baseModel() -- A getter/setter for the baseModel to be used by sheath.model() as the default parent prototype.
 	*/
@@ -978,8 +989,8 @@
 		Sheath.baseModel = constructor
 		return sheath.config // for chaining
 	}
-
-
+	
+	
 	/*
 		sheath.config.baseObject() -- A getter/setter for the baseObject to be used by sheath.object() as the default parent prototype.
 	*/
@@ -992,8 +1003,8 @@
 		Sheath.baseObject = baseObject
 		return sheath.config // for chaining
 	}
-
-
+	
+	
 	/*
 		sheath.config.emulateBrowser() -- A getter/setter for whether Sheath is currently running in browser-mode.
 		This is used to find the global object and to implement asynchronous loading.
@@ -1006,8 +1017,8 @@
 		inBrowser = Boolean(val)
 		return sheath.config // for chaining
 	}
-
-
+	
+	
 	/*
 		sheath.config.mode() -- A getter/setter to get the status of and enable/disable advanced debugging/analysis tools.
 	*/
@@ -1020,16 +1031,15 @@
 		Sheath.mode = val
 		return sheath.config // for chaining
 	}
-
-
+	
+	
 	/*
 		sheath.const() -- Use to declare/fetch universal constants -- immutable values that the whole app should have access to.
 	*/
 	sheath.const = function(key, val) {
 		if (typeof key === 'string') {
 			if (typeof val === 'undefined') return Sheath.constants[key]
-			if (typeof val === 'object') Object.freeze(val)
-
+			
 			Sheath.defineConst(key, val)
 			return sheath // for chaining
 		}
@@ -1039,8 +1049,8 @@
 		})
 		return sheath // for chaining
 	}
-
-
+	
+	
 	/*
 		sheath.current() -- Get the name of the module currently being defined. Use to reduce duplication.
 	*/
@@ -1048,8 +1058,8 @@
 		Assert.task()
 		return Sheath.tasks.length ? Sheath.tasks[Sheath.tasks.length - 1].interface : null
 	}
-
-
+	
+	
 	/*
 		sheath.dependents() -- Returns a map of modules -> dependents
 		An analysis tool.
@@ -1120,8 +1130,8 @@
 	sheath.missing = function() {
 		return Sheath.undeclaredModules(true)
 	}
-
-
+	
+	
 	/*
 		sheath.model() -- An easy interface for declaring JavaScript 'classes' with inheritance.
 
@@ -1156,8 +1166,8 @@
 
 		return constructor
 	}
-
-
+	
+	
 	/*
 		sheath.object() -- An easy interface for declaring JavaScript objects with custom and inheriting prototypes.
 

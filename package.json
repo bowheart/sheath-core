@@ -1,5 +1,5 @@
 {
-  "name": "sheath.js",
+  "name": "sheath-js",
   "version": "0.1.0",
   "description": "The Module Library",
   "main": "src/sheath.js",
@@ -17,19 +17,21 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/bowheart/sheath.js.git"
+    "url": "https://github.com/bowheart/sheath-js.git"
   },
   "keywords": [
     "module",
     "dependency",
-    "injection"
+    "injection",
+    "sheath",
+    "async"
   ],
   "author": "Joshua Claunch",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/bowheart/sheath.js/issues"
+    "url": "https://github.com/bowheart/sheath-js/issues"
   },
-  "homepage": "https://github.com/bowheart/sheath.js#readme",
+  "homepage": "https://github.com/bowheart/sheath-js#readme",
   "jest": {
     "collectCoverage": true
   }
