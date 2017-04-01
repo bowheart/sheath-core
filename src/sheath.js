@@ -1256,33 +1256,6 @@
 	
 	
 	/*
-		sheath.reset() -- Clear all modules and all data of every kind (except mods) and start over. (Not available in production builds).
-	*/
-	sheath.reset = function() {
-		Hook.moduleDeclaredListeners = []
-		Sheath.asyncEnabled = true
-		Sheath.constants = {}
-		Sheath.declaredModules = {}
-		Sheath.definedModules = {}
-		Sheath.dependents = {}
-		Sheath.initialModules = []
-		Sheath.linkedModules = {}
-		Sheath.mode = 'production'
-		
-		// A reset doesn't clear mods, but calls each mod's (optional) reset method, allowing them to clear themselves.
-		Object.keys(Sheath.mods).forEach(function(modName) {
-			if (sheath[modName] && typeof sheath[modName].reset === 'function') sheath[modName].reset()
-		})
-		Sheath.phase = 'config'
-		setTimeout(advancePhases)
-		Sheath.requestedFiles = {}
-		Sheath.requestedModules = {}
-		Sheath.tasks = []
-		return sheath // for chaining
-	}
-	
-	
-	/*
 		sheath.run() -- Run some code that leverages Sheath's dependency injection, but without declaring a module.
 		Useful for circumventing circular dependencies.
 		The 'deps' arg is optional, so this can also be used to defer execution until after the config phase.
