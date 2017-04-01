@@ -1235,34 +1235,6 @@
 	
 	
 	/*
-		sheath.onModuleDeclared() -- Register a listener that will be called every time a module is declared.
-		A hook.
-	*/
-	sheath.onModuleDeclared = function(listener) {
-		Assert.setFunc('sheath.onModuleDeclared()')
-		Assert.configPhase('Listeners can only be registered during the config phase.')
-		Assert.func(listener, 'Listener')
-		
-		Hook.moduleDeclaredListeners.push(listener)
-		return sheath // for chaining
-	}
-	
-	
-	/*
-		sheath.onModuleDefined() -- Register a listener that will be called every time a module is defined.
-		A hook.
-	*/
-	sheath.onModuleDefined = function(listener) {
-		Assert.setFunc('sheath.onModuleDefined()')
-		Assert.configPhase('Listeners can only be registered during the config phase.')
-		Assert.func(listener, 'Listener')
-		
-		Hook.moduleDefinedListeners.push(listener)
-		return sheath // for chaining
-	}
-	
-	
-	/*
 		sheath.phase() -- A debugging utility. This will return the life phase that Sheath is currently in.
 		Use this to familiarize yourself with Sheath's lifecycle.
 		An analysis tool.
