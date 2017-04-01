@@ -205,25 +205,31 @@
 	
 	
 	var Hook = {
+		asyncPhaseListeners: [],
 		moduleDeclaredListeners: [],
 		moduleDefinedListeners: [],
+		syncPhaseListeners: [],
 		
-		mapDeps: function(module) {
-			return module.rawDeps.map(function(dep) { return dep }) // map so that we hand a deep copy to the listener
+		asyncPhase: function() {
+			while (this.asyncPhaseListeners.length) this.asyncPhaseListeners.shift()()
 		},
 		
 		moduleDeclared: function(module) {
-			var deps = this.mapDeps(module)
+			var deps = Sheath.copyArr(module.rawDeps)
 			for (var i = 0; i < this.moduleDeclaredListeners.length; i++) {
 				this.moduleDeclaredListeners[i](module.name, deps, module.factory)
 			}
 		},
 		
 		moduleDefined: function(module) {
-			var deps = this.mapDeps(module)
+			var deps = Sheath.copyArr(module.rawDeps)
 			for (var i = 0; i < this.moduleDefinedListeners.length; i++) {
 				this.moduleDefinedListeners[i](module.name, deps, module.visage)
 			}
+		},
+		
+		syncPhase: function() {
+			while (this.syncPhaseListeners.length) this.syncPhaseListeners.shift()()
 		}
 	}
 	
@@ -282,6 +288,13 @@
 			if (this.definedModules[depName]) module.readyDeps.push(this.definedModules[depName])
 		},
 		
+		advancePhases: function() {
+			this.toPhase('sync')
+			
+			// setTimeout -- allow any deferred tasks set during the sync phase to complete before advancing to the async phase
+			setTimeout(this.toPhase.bind(this, 'async'))
+		},
+		
 		asyncLoaderFactory: function(moduleName, fileName, onload, sync) {
 			var loader = new (inBrowser ? ClientLoader : ServerLoader)(moduleName, fileName, onload, sync)
 			loader.load()
@@ -294,6 +307,10 @@
 		asyncResolver: function(module) {
 			// The default async filename resolver just assumes that the module name is the filepath minus the '.js' extension.
 			return module + '.js'
+		},
+		
+		copyArr: function(arr) {
+			return arr.map(function(element) { return element }) // map to create a deep copy
 		},
 		
 		declareInitialModules: function() {
@@ -414,10 +431,12 @@
 		toPhase: function(phase) {
 			this.phase = phase
 			if (phase === 'sync') {
+				Hook.syncPhase()
 				this.declareInitialModules()
 				return
 			}
 			// async phase
+			Hook.asyncPhase()
 			var undeclaredModules = this.undeclaredModules()
 			Assert.noUndeclaredModules(undeclaredModules)
 			this.loadAsync(undeclaredModules)
@@ -1490,15 +1509,9 @@
 		Run the sync phase, then:
 		Turn on asychronous loading and request any not-yet-declared modules.
 	*/
-	function advancePhases() {
-		Sheath.toPhase('sync')
-		
-		// setTimeout -- allow any deferred tasks set during the sync phase to complete before advancing to the async phase
-		setTimeout(Sheath.toPhase.bind(Sheath, 'async'))
-	}
 	inBrowser
-		? (window.onload = advancePhases)
-		: setTimeout(advancePhases)
+		? (window.onload = Sheath.advancePhases.bind(Sheath))
+		: setTimeout(Sheath.advancePhases.bind(Sheath))
 	
 	return sheath
 }))
