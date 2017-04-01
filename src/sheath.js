@@ -1372,10 +1372,6 @@
 			return files
 		}
 		
-		api.reset = function() {
-			libs = []
-		}
-		
 		var Lib = function(moduleName, globalName, fileName) {
 			this.name = moduleName
 			this.globalName = globalName
