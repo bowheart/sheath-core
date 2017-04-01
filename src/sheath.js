@@ -1216,6 +1216,25 @@
 	
 	
 	/*
+		sheath.on() -- Register a listener for one of Sheath's lifecycle hooks.
+	*/
+	sheath.on = function(hook, listener) {
+		Assert.setFunc('sheath.on()')
+		Assert.string(hook, 'Hook')
+		Assert.func(Hook[hook], 'Hook "' + hook + '" does not exist.')
+		Assert.func(listener, 'Listener')
+		
+		// If the hook is a one-time thing and we're already past it, run the listener immediately.
+		if (hook === 'syncPhase' && !Sheath.configPhase || hook === 'asyncPhase' && Sheath.asyncPhase) {
+			listener()
+		} else {
+			Hook[hook + 'Listeners'].push(listener)
+		}
+		return sheath // for chaining
+	}
+	
+	
+	/*
 		sheath.onModuleDeclared() -- Register a listener that will be called every time a module is declared.
 		A hook.
 	*/
