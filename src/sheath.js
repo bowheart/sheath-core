@@ -801,7 +801,7 @@
 			if (this.loaded()) return this.abort()
 			
 			Sheath.requestedFiles[this.fileName] = ''
-			return this.implementLoad()
+			return this.isScript ? this.loadScript() : this.loadOther()
 		},
 		
 		loaded: function() {
@@ -825,10 +825,6 @@
 		attachHandlers: function(loadable) {
 			loadable.onload = this.loadSuccessful
 			Assert.loadNotFailed(this, loadable)
-		},
-		
-		implementLoad: function() {
-			return this.isScript ? this.loadScript() : this.loadOther()
 		},
 		
 		loadOther: function() {
@@ -860,31 +856,29 @@
 		ServerLoader -- Implement asynchronous file loading for a server environment.
 	*/
 	var ServerLoader = function() {
+		ServerLoader.fs || (ServerLoader.fs = require('fs'))
 		Loader.apply(this, arguments)
 	}
 	ServerLoader.prototype = Object.create(Loader.prototype, Sheath.toPropertyDescriptors({
-		implementLoad: function() {
-			ServerLoader.fs || (ServerLoader.fs = require('fs'))
-			ServerLoader.vm || (ServerLoader.vm = require('vm'))
-			ServerLoader.context || (ServerLoader.context = ServerLoader.vm.createContext({
-				sheath: sheath,
-				global: Sheath.global
-			}))
-			
-			this.sync ? this.implementLoadSync() : this.implementLoadAsync()
-		},
-		
-		implementLoadAsync: function() {
-			ServerLoader.fs.readFile(this.fileName, this.loadComplete.bind(this))
-		},
-		
-		implementLoadSync: function() {
+		loadOther: function() {
+			if (!this.sync) return ServerLoader.fs.readFile(this.fileName, this.loadComplete.bind(this))
 			try {
 				var contents = ServerLoader.fs.readFileSync(this.fileName)
-				this.loadComplete(undefined, contents)
+				this.loadComplete(null, contents)
 			} catch (ex) {
 				this.loadComplete(ex)
 			}
+		},
+		
+		loadScript: function() {
+			Sheath.global.sheath || (Sheath.global.sheath = sheath)
+			try {
+				delete require.cache[require.resolve(this.fileName)]
+				var result = require(this.fileName)
+			} catch (ex) {
+				return this.loadComplete(ex)
+			}
+			this.loadComplete(null, result)
 		},
 		
 		loadComplete: function(err, fileContents) {
@@ -894,10 +888,7 @@
 			}
 			fileContents = fileContents.toString()
 			Sheath.requestedFiles[this.fileName] = fileContents
-			if (!this.isScript) return this.onload && this.onload(err, fileContents)
-			
-			ServerLoader.vm.runInContext(fileContents.toString(), ServerLoader.context)
-			if (this.onload) this.onload(err)
+			return this.onload && this.onload(err, fileContents)
 		}
 	}))
 	
