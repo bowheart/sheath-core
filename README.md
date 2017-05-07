@@ -1,9 +1,9 @@
-[![build status](https://travis-ci.org/bowheart/sheath.js.svg?branch=master)](https://travis-ci.org/bowheart/sheath.js)
-[![Test Coverage](https://codeclimate.com/github/bowheart/sheath.js/badges/coverage.svg)](https://codeclimate.com/github/bowheart/sheath.js/coverage)
-[![Issue Count](https://img.shields.io/codeclimate/issues/github/bowheart/sheath.js.svg)](https://codeclimate.com/github/bowheart/sheath.js/issues)
-[![Code Climate](https://codeclimate.com/github/bowheart/sheath.js/badges/gpa.svg)](https://codeclimate.com/github/bowheart/sheath.js)
+[![build status](https://travis-ci.org/bowheart/sheath-core.svg?branch=master)](https://travis-ci.org/bowheart/sheath-core)
+[![Test Coverage](https://codeclimate.com/github/bowheart/sheath-core/badges/coverage.svg)](https://codeclimate.com/github/bowheart/sheath-core/coverage)
+[![Issue Count](https://img.shields.io/codeclimate/issues/github/bowheart/sheath-core.svg)](https://codeclimate.com/github/bowheart/sheath-core/issues)
+[![Code Climate](https://codeclimate.com/github/bowheart/sheath-core/badges/gpa.svg)](https://codeclimate.com/github/bowheart/sheath-core)
 
-# Sheath.js
+# Sheath
 
 Sheath is a utility library for modular applications. It's *the* module library.
 
@@ -55,11 +55,11 @@ Every module goes through this basic life cycle.
 
 ## To Be Continued...
 
-That's really all you need to get started! Take a look at the [github wiki](https://github.com/bowheart/sheath.js/wiki) for a more in-depth rundown and the full API documentation.
+That's really all you need to get started! Take a look at the [github wiki](https://github.com/bowheart/sheath-core/wiki) for a more in-depth rundown and the full API documentation.
 
 ## Bugs, Pull Requests, Feedback, Just Everything
 
-Bugs can be reported at the [github issues page](https://github.com/bowheart/sheath.js/issues). All suggestions and feedback are so super welcome. Also feel free to fork and pull request &ndash; just make sure the tests pass (`npm test`) and try to keep the tests at ~100% coverage. Happy coding!
+Bugs can be reported at the [github issues page](https://github.com/bowheart/sheath-core/issues). All suggestions and feedback are so super welcome. Also feel free to fork and pull request &ndash; just make sure the tests pass (`npm test`) and try to keep the tests at ~100% coverage. Happy coding!
 
 ## License
 

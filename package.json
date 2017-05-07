@@ -1,5 +1,5 @@
 {
-  "name": "sheath.js",
+  "name": "@sheath/core",
   "version": "0.1.0",
   "description": "The Module Library",
   "main": "src/sheath.js",
@@ -9,7 +9,6 @@
   },
   "dependencies": {},
   "devDependencies": {
-    "codeclimate-test-reporter": "^0.4.0",
     "jest-cli": "^17.0.3"
   },
   "scripts": {
@@ -17,7 +16,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/bowheart/sheath.js.git"
+    "url": "git+https://github.com/bowheart/sheath-core.git"
   },
   "keywords": [
     "module",
@@ -27,9 +26,9 @@
   "author": "Joshua Claunch",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/bowheart/sheath.js/issues"
+    "url": "https://github.com/bowheart/sheath-core/issues"
   },
-  "homepage": "https://github.com/bowheart/sheath.js#readme",
+  "homepage": "https://github.com/bowheart/sheath-core#readme",
   "jest": {
     "collectCoverage": true
   }
